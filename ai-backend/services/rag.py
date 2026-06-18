@@ -26,14 +26,17 @@ class VectorStore:
             self._vectors = np.load(str(self._vectors_file))
 
     def _save(self):
-        self._index_file.write_text(json.dumps(self._chunks, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._index_file.write_text(
+            json.dumps(self._chunks, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         if self._vectors is not None:
             np.save(str(self._vectors_file), self._vectors)
 
     async def add_chunks(self, chunks: list[dict[str, Any]], knowledge_base_id: str):
-        texts = [c["content"] for c in chunks]
+        texts = [chunk["content"] for chunk in chunks]
         embeddings = await llm.embedding(texts)
-        for i, chunk in enumerate(chunks):
+        for chunk in chunks:
             chunk["id"] = hashlib.md5(chunk["content"].encode()).hexdigest()[:12]
             chunk["knowledge_base_id"] = knowledge_base_id
         self._chunks.extend(chunks)
@@ -44,49 +47,56 @@ class VectorStore:
             self._vectors = np.vstack([self._vectors, new_vectors])
         self._save()
 
-    async def search(self, query: str, top_k: int = 8, knowledge_base_id: str | None = None) -> list[dict]:
+    async def search(
+        self,
+        query: str,
+        top_k: int = 8,
+        knowledge_base_id: str | None = None,
+    ) -> list[dict]:
         if not self._chunks or self._vectors is None:
             return []
         query_emb = (await llm.embedding([query]))[0]
         query_vec = np.array(query_emb, dtype=np.float32)
         scores = np.dot(self._vectors, query_vec)
-        indices = np.argsort(scores)[::-1][:top_k]
+        indices = np.argsort(scores)[::-1]
         results = []
         for idx in indices:
             chunk = self._chunks[int(idx)]
             if knowledge_base_id and chunk.get("knowledge_base_id") != knowledge_base_id:
                 continue
             results.append({**chunk, "score": float(scores[int(idx)])})
+            if len(results) >= top_k:
+                break
         return results
 
     def get_chunks_by_kb(self, knowledge_base_id: str) -> list[dict]:
-        return [c for c in self._chunks if c.get("knowledge_base_id") == knowledge_base_id]
+        return [chunk for chunk in self._chunks if chunk.get("knowledge_base_id") == knowledge_base_id]
 
     def remove_by_kb(self, knowledge_base_id: str):
-        keep = [c for c in self._chunks if c.get("knowledge_base_id") != knowledge_base_id]
-        removed = len(self._chunks) - len(keep)
-        self._chunks = keep
-        self._rebuild_vectors()
+        if not self._chunks:
+            return 0
+        keep_indices = [
+            index
+            for index, chunk in enumerate(self._chunks)
+            if chunk.get("knowledge_base_id") != knowledge_base_id
+        ]
+        removed = len(self._chunks) - len(keep_indices)
+        self._chunks = [self._chunks[index] for index in keep_indices]
+        if self._vectors is not None:
+            self._vectors = self._vectors[keep_indices] if keep_indices else None
         self._save()
         return removed
 
-    def _rebuild_vectors(self):
-        classes = list({c["knowledge_base_id"] for c in self._chunks})
-        if not classes:
-            self._vectors = None
-            return
-        all_vectors = []
-        for c in self._chunks:
-            vec = getattr(c, "_vec", None)
-            if vec is not None:
-                all_vectors.append(vec)
-        self._vectors = np.array(all_vectors, dtype=np.float32) if all_vectors else None
-
     def stats(self) -> dict:
+        by_knowledge_base: dict[str, int] = {}
+        for chunk in self._chunks:
+            base_id = chunk.get("knowledge_base_id", "unknown")
+            by_knowledge_base[base_id] = by_knowledge_base.get(base_id, 0) + 1
         return {
             "total_chunks": len(self._chunks),
-            "knowledge_bases": len({c.get("knowledge_base_id") for c in self._chunks}),
+            "knowledge_bases": len(by_knowledge_base),
             "vector_dim": self._vectors.shape[1] if self._vectors is not None else 0,
+            "by_knowledge_base": by_knowledge_base,
         }
 
 
@@ -101,14 +111,19 @@ class RAGService:
         top_k: int = 8,
         model: str = "",
     ) -> dict[str, Any]:
-        chunks = await vector_store.search(question, top_k=top_k, knowledge_base_id=knowledge_base_id)
+        chunks = await vector_store.search(
+            question,
+            top_k=top_k,
+            knowledge_base_id=knowledge_base_id,
+        )
         context = "\n\n".join(
-            f"[{c.get('knowledge_base_id', 'unknown')}] {c['content']}"
-            for c in chunks
+            f"[{chunk.get('knowledge_base_id', 'unknown')}] {chunk['content']}"
+            for chunk in chunks
         )
         system_prompt = (
             "你是企业 AI 工作台助手。回答应基于以下知识库内容，重要结论需要给出引用来源；"
-            "当证据不足时明确说明不确定性。\n\n知识库内容：\n" + context
+            "当证据不足时明确说明不确定性。\n\n知识库内容：\n"
+            + context
         )
         messages = [
             {"role": "system", "content": system_prompt},
@@ -120,7 +135,14 @@ class RAGService:
             temperature=settings.default_temperature,
             max_tokens=4096,
         )
-        citations = [{"id": c.get("id", ""), "content": c["content"][:200], "score": c["score"]} for c in chunks[:5]]
+        citations = [
+            {
+                "id": chunk.get("id", ""),
+                "content": chunk["content"][:200],
+                "score": chunk["score"],
+            }
+            for chunk in chunks[:5]
+        ]
         return {
             "answer": result.get("choices", [{}])[0].get("message", {}).get("content", ""),
             "citations": citations,

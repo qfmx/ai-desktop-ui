@@ -1,39 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  CheckCircle2,
-  Database,
-  FileText,
-  Filter,
-  Grid3X3,
-  Layers3,
-  List,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-  Upload,
-} from "lucide-react";
 import { api } from "../services/api";
-
-type KnowledgeBase = {
-  id: string;
-  name: string;
-  description: string;
-  documents: number;
-  chunks: number;
-  size: string;
-  status: "ready" | "syncing" | "warning";
-  owner: string;
-  updatedAt: string;
-  embedding: string;
-  health: number;
-  tags: string[];
-};
-
-const statusMap: Record<string, string> = {
-  ready: "可用",
-  syncing: "同步中",
-  warning: "需复核",
-};
+import type { AccessRule, KnowledgeBase, KnowledgeStats } from "../types/knowledge";
+import { KnowledgeSummary } from "../components/knowledge/KnowledgeSummary";
+import { KnowledgeToolbar } from "../components/knowledge/KnowledgeToolbar";
+import { KnowledgeList } from "../components/knowledge/KnowledgeList";
+import { PermissionMatrix } from "../components/knowledge/PermissionMatrix";
 
 export default function KnowledgePage() {
   const [bases, setBases] = useState<KnowledgeBase[]>([]);
@@ -41,6 +12,8 @@ export default function KnowledgePage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedId, setSelectedId] = useState("");
   const [backendOk, setBackendOk] = useState(false);
+  const [stats, setStats] = useState<KnowledgeStats | null>(null);
+  const [accessRules, setAccessRules] = useState<AccessRule[]>([]);
 
   useEffect(() => {
     api.health()
@@ -50,23 +23,29 @@ export default function KnowledgePage() {
 
   useEffect(() => {
     if (!backendOk) return;
-    api.knowledge.bases().then((list) => {
+    void Promise.all([
+      api.knowledge.bases(),
+      api.knowledge.stats(),
+      api.knowledge.accessMatrix(),
+    ]).then(([list, nextStats, matrix]) => {
       setBases(
         list.map((b: any) => ({
           id: b.id,
           name: b.name,
           description: b.description,
           documents: b.documents ?? 0,
-          chunks: 0,
-          size: "—",
+          chunks: b.chunks ?? 0,
+          size: b.size || "—",
           status: b.status || "ready",
           owner: b.owner || "",
           updatedAt: b.updated_at || "",
           embedding: b.embedding_model || "",
-          health: b.status === "ready" ? 94 : b.status === "syncing" ? 86 : 72,
+          health: b.health ?? 0,
           tags: typeof b.tags === "string" ? JSON.parse(b.tags) : b.tags || [],
         }))
       );
+      setStats(nextStats);
+      setAccessRules(matrix);
       if (list.length > 0) setSelectedId(list[0].id);
     });
   }, [backendOk]);
@@ -82,8 +61,6 @@ export default function KnowledgePage() {
     );
   }, [query, bases]);
 
-  const totalDocuments = bases.reduce((sum, base) => sum + base.documents, 0);
-
   if (!backendOk) {
     return (
       <div className="workspace-page" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
@@ -94,125 +71,23 @@ export default function KnowledgePage() {
 
   return (
     <div className="workspace-page">
-      <section className="summary-grid">
-        <article className="summary-card" data-tone="cyan">
-          <Database size={20} />
-          <span>知识库总数</span>
-          <strong>{bases.length}</strong>
-        </article>
-        <article className="summary-card" data-tone="green">
-          <FileText size={20} />
-          <span>文档总量</span>
-          <strong>{totalDocuments.toLocaleString()}</strong>
-        </article>
-        <article className="summary-card" data-tone="amber">
-          <Layers3 size={20} />
-          <span>切片总量</span>
-          <strong>—</strong>
-        </article>
-        <article className="summary-card" data-tone="rose">
-          <ShieldCheck size={20} />
-          <span>权限策略</span>
-          <strong>12</strong>
-        </article>
-      </section>
+      <KnowledgeSummary bases={bases} stats={stats} policyCount={accessRules.length} />
 
-      <section className="page-toolbar">
-        <label className="local-search">
-          <Search size={17} />
-          <input
-            aria-label="搜索知识库"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索知识库、标签、负责人"
-            value={query}
-          />
-        </label>
-        <div className="toolbar-buttons">
-          <button className="secondary-action" type="button">
-            <Filter size={16} /> 筛选
-          </button>
-          <button className="secondary-action" type="button">
-            <RefreshCw size={16} /> 重建索引
-          </button>
-          <button className="primary-action compact" type="button">
-            <Upload size={16} /> 上传文档
-          </button>
-          <div className="view-toggle">
-            <button className={viewMode === "grid" ? "active" : ""} onClick={() => setViewMode("grid")} title="网格" type="button">
-              <Grid3X3 size={16} />
-            </button>
-            <button className={viewMode === "list" ? "active" : ""} onClick={() => setViewMode("list")} title="列表" type="button">
-              <List size={16} />
-            </button>
-          </div>
-        </div>
-      </section>
+      <KnowledgeToolbar
+        query={query}
+        onQueryChange={setQuery}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+      />
 
-      <section className={viewMode === "grid" ? "knowledge-grid" : "knowledge-list"}>
-        {filteredBases.map((base) => (
-          <article
-            className={`knowledge-card ${selectedId === base.id ? "selected" : ""}`}
-            key={base.id}
-            onClick={() => setSelectedId(base.id)}
-          >
-            <header>
-              <div className="knowledge-icon">
-                <Database size={20} />
-              </div>
-              <span className={`status-badge ${base.status}`}>{statusMap[base.status]}</span>
-            </header>
-            <h2>{base.name}</h2>
-            <p>{base.description}</p>
-            <div className="tag-row">
-              {base.tags.map((tag) => (
-                <span key={tag}>{tag}</span>
-              ))}
-            </div>
-            <div className="knowledge-meta">
-              <span>{base.documents.toLocaleString()} 文档</span>
-              <span>— 切片</span>
-              <span>{base.size}</span>
-            </div>
-            <div className="health-row">
-              <span>健康度</span>
-              <strong>{base.health}%</strong>
-              <div>
-                <i style={{ width: `${base.health}%` }} />
-              </div>
-            </div>
-            <footer>
-              <span>{base.embedding}</span>
-              <small>{base.updatedAt}</small>
-            </footer>
-          </article>
-        ))}
-      </section>
+      <KnowledgeList
+        bases={filteredBases}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        viewMode={viewMode}
+      />
 
-      <section className="permission-matrix">
-        <header className="section-title">
-          <div>
-            <span className="eyebrow">Access</span>
-            <h2>权限矩阵</h2>
-          </div>
-          <CheckCircle2 size={19} />
-        </header>
-        <div className="matrix-table">
-          <div className="matrix-row head">
-            <span>知识库</span>
-            <span>负责人</span>
-            <span>可访问角色</span>
-            <span>策略</span>
-          </div>
-          {filteredBases.slice(0, 3).map((base) => (
-            <div className="matrix-row" key={base.id}>
-              <span>{base.name}</span>
-              <span>{base.owner}</span>
-              <span>{base.owner} · 管理层</span>
-              <strong>全员可读</strong>
-            </div>
-          ))}
-        </div>
-      </section>
+      <PermissionMatrix rules={accessRules.filter((rule) => filteredBases.some((base) => base.id === rule.id))} />
     </div>
   );
 }

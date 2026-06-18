@@ -8,14 +8,14 @@ import {
   ThumbsUp,
   UserRound,
 } from "lucide-react";
-import type { Message } from "./types";
+import type { Message, QuickAction } from "../../types/chat";
 
 interface MessageThreadProps {
   messages: Message[];
   isGenerating: boolean;
   streamingText: string;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
-  quickActions: { title: string; prompt: string }[];
+  quickActions: QuickAction[];
   onQuickAction: (prompt: string) => void;
 }
 

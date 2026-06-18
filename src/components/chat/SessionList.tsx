@@ -1,5 +1,5 @@
 import { MessageSquare } from "lucide-react";
-import type { ChatSession } from "./types";
+import type { ChatSession } from "../../types/chat";
 
 interface SessionListProps {
   sessions: ChatSession[];

@@ -28,11 +28,21 @@ export const api = {
   },
 
   chat: {
+    quickActions: () => request<{ title: string; prompt: string }[]>("/api/chat/quick-actions"),
+    runtimeContext: (sessionId?: string) =>
+      request<any>(
+        `/api/chat/runtime-context${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ""}`
+      ),
     sessions: () => request<any[]>("/api/chat/sessions"),
     session: (id: string) => request<any>(`/api/chat/sessions/${id}`),
     create: (data: any) =>
       request<any>("/api/chat/sessions", {
         method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: any) =>
+      request<any>(`/api/chat/sessions/${id}`, {
+        method: "PATCH",
         body: JSON.stringify(data),
       }),
     ask: (data: {
@@ -123,6 +133,7 @@ export const api = {
         body: JSON.stringify({ file_path: filePath }),
       }),
     stats: () => request<any>("/api/knowledge/stats"),
+    accessMatrix: () => request<any[]>("/api/knowledge/access-matrix"),
   },
 
   models: {
@@ -150,6 +161,8 @@ export const api = {
 
   settings: {
     get: () => request<any>("/api/settings"),
+    storage: () => request<any[]>("/api/settings/storage"),
+    promptTemplates: () => request<any[]>("/api/settings/prompt-templates"),
     save: (data: any) =>
       request<any>("/api/settings", {
         method: "POST",

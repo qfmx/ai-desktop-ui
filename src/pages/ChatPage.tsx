@@ -1,18 +1,54 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageSquare, Zap } from "lucide-react";
 import { api } from "../services/api";
-
 import { SessionList } from "../components/chat/SessionList";
 import { MessageThread } from "../components/chat/MessageThread";
 import { Composer } from "../components/chat/Composer";
 import { ContextPanel } from "../components/chat/ContextPanel";
-import type { ChatSession, Message } from "../components/chat/types";
+import type { ChatSession, Message, QuickAction, RuntimeContext } from "../types/chat";
 
-const quickActions = [
-  { title: "制度问答", prompt: "请解释差旅报销流程中需要主管审批的场景。" },
-  { title: "合同审查", prompt: "识别合同中可能导致延期赔付争议的条款。" },
-  { title: "工单分析", prompt: "汇总最近 7 天交付延期工单的主要原因。" },
-];
+type ChatSettings = {
+  default_llm_model: string;
+  default_top_k: number;
+  default_temperature: number;
+};
+
+function parseJsonList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function mapSession(raw: any): ChatSession {
+  return {
+    id: raw.id,
+    title: raw.title,
+    scope: raw.scope || "",
+    model: raw.model || "",
+    tags: parseJsonList(raw.tags),
+    messages: [],
+  };
+}
+
+function mapMessage(raw: any): Message {
+  return {
+    id: raw.id,
+    role: raw.role,
+    author: raw.role === "assistant" ? "Enterprise AI" : "你",
+    content: raw.content,
+    time: raw.created_at || "",
+    model: raw.model || undefined,
+    tokens: raw.tokens || undefined,
+    citations: parseJsonList(raw.citations),
+  };
+}
 
 export default function ChatPage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -21,6 +57,13 @@ export default function ChatPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [backendOk, setBackendOk] = useState(false);
+  const [quickActions, setQuickActions] = useState<QuickAction[]>([]);
+  const [runtimeContext, setRuntimeContext] = useState<RuntimeContext | null>(null);
+  const [chatSettings, setChatSettings] = useState<ChatSettings>({
+    default_llm_model: "",
+    default_top_k: 8,
+    default_temperature: 0.4,
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<AbortController | null>(null);
 
@@ -28,52 +71,59 @@ export default function ChatPage() {
     api.waitForBackend(15, 1000).then(setBackendOk);
   }, []);
 
+  const loadSessions = useCallback(async () => {
+    const list = await api.chat.sessions();
+    const mapped = list.map(mapSession);
+    setSessions(mapped);
+    setActiveId((current) => current || mapped[0]?.id || "");
+  }, []);
+
   useEffect(() => {
     if (!backendOk) return;
-    api.chat.sessions().then((list: any[]) => {
-      if (list.length > 0) {
-        setSessions(
-          list.map((s: any) => ({
-            ...s,
-            tags: typeof s.tags === "string" ? JSON.parse(s.tags) : s.tags,
-            messages: [],
-          }))
-        );
-        setActiveId(list[0].id);
-      }
-    });
-  }, [backendOk]);
+    void Promise.all([
+      loadSessions(),
+      api.chat.quickActions().then(setQuickActions),
+      api.settings.get().then((settings) => {
+        setChatSettings({
+          default_llm_model: settings.default_llm_model ?? "",
+          default_top_k: settings.default_top_k ?? 8,
+          default_temperature: settings.default_temperature ?? 0.4,
+        });
+      }),
+    ]);
+  }, [backendOk, loadSessions]);
 
   const activeSession = useMemo(
-    () => sessions.find((s) => s.id === activeId) ?? sessions[0],
-    [activeId, sessions]
+    () => sessions.find((session) => session.id === activeId) ?? sessions[0],
+    [activeId, sessions],
   );
 
   useEffect(() => {
     if (!activeId || !backendOk) return;
-    api.chat.session(activeId).then((s: any) => {
+    api.chat.session(activeId).then((session) => {
       setSessions((prev) =>
-        prev.map((session) =>
-          session.id === activeId
+        prev.map((item) =>
+          item.id === activeId
             ? {
-                ...session,
-                messages: (s.messages ?? []).map((m: any) => ({
-                  ...m,
-                  citations:
-                    typeof m.citations === "string"
-                      ? JSON.parse(m.citations)
-                      : m.citations,
-                })),
+                ...item,
+                messages: (session.messages ?? []).map(mapMessage),
               }
-            : session
-        )
+            : item,
+        ),
       );
     });
+    api.chat.runtimeContext(activeId).then(setRuntimeContext);
   }, [activeId, backendOk]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeSession?.messages.length, streamingText, isGenerating]);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.abort();
+    };
+  }, []);
 
   const handleSend = useCallback(() => {
     const content = input.trim();
@@ -88,11 +138,11 @@ export default function ChatPage() {
     };
 
     setSessions((prev) =>
-      prev.map((s) =>
-        s.id === activeSession.id
-          ? { ...s, messages: [...s.messages, userMessage] }
-          : s
-      )
+      prev.map((session) =>
+        session.id === activeSession.id
+          ? { ...session, messages: [...session.messages, userMessage] }
+          : session,
+      ),
     );
     setInput("");
     setIsGenerating(true);
@@ -105,20 +155,21 @@ export default function ChatPage() {
         question: content,
         session_id: activeSession.id,
         model: activeSession.model || undefined,
+        top_k: chatSettings.default_top_k,
       },
-      (token: string) => {
+      (token) => {
         setStreamingText((prev) => prev + token);
       },
-      (result: any) => {
+      (result) => {
         setStreamingText("");
         setIsGenerating(false);
         setSessions((prev) =>
-          prev.map((s) =>
-            s.id === activeSession.id
+          prev.map((session) =>
+            session.id === activeSession.id
               ? {
-                  ...s,
+                  ...session,
                   messages: [
-                    ...s.messages,
+                    ...session.messages,
                     {
                       id: assistantId,
                       role: "assistant",
@@ -126,38 +177,49 @@ export default function ChatPage() {
                       content: result.content,
                       time: "现在",
                       model: result.model,
-                      citations: result.citations?.map((c: any) => c.id || c.content) ?? [],
+                      citations: result.citations?.map((item: any) => item.id || item.content) ?? [],
                     },
                   ],
                 }
-              : s
-          )
+              : session,
+          ),
         );
+        api.chat.runtimeContext(activeSession.id).then(setRuntimeContext);
       },
       () => {
         setIsGenerating(false);
         setStreamingText("");
-      }
+      },
     );
-  }, [input, isGenerating, activeSession]);
+  }, [activeSession, chatSettings.default_top_k, input, isGenerating]);
 
   const handleNewSession = async () => {
     const id = `session-${Date.now()}`;
-    await api.chat.create({ id, title: "新会话", model: "gpt-4o-mini" });
-    setSessions((prev) => [
-      { id, title: "新会话", scope: "", model: "gpt-4o-mini", messages: [] },
-      ...prev,
-    ]);
+    await api.chat.create({
+      id,
+      title: "新会话",
+      model: chatSettings.default_llm_model || undefined,
+    });
+    const session: ChatSession = {
+      id,
+      title: "新会话",
+      scope: "",
+      model: chatSettings.default_llm_model,
+      messages: [],
+    };
+    setSessions((prev) => [session, ...prev]);
     setActiveId(id);
   };
 
   if (!backendOk) {
     return (
-      <div className="workspace-page" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
-        <div style={{ textAlign: "center" }}>
-          <Zap size={48} style={{ opacity: 0.3, marginBottom: 16 }} />
-          <h2>正在启动后端服务...</h2>
-          <p style={{ opacity: 0.6 }}>请在 ai-backend 目录运行 <code>uv run python main.py</code></p>
+      <div className="workspace-page center-state">
+        <div>
+          <Zap size={48} />
+          <h2>正在连接后端服务</h2>
+          <p>
+            请在 <code>ai-backend</code> 目录运行 <code>uv run python main.py</code>
+          </p>
         </div>
       </div>
     );
@@ -165,23 +227,13 @@ export default function ChatPage() {
 
   if (!activeSession) {
     return (
-      <div className="workspace-page" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div className="workspace-page center-state">
         <button className="primary-action" onClick={handleNewSession} type="button">
-          <MessageSquare size={17} /> 创建第一个会话
+          <MessageSquare size={17} />
+          创建第一个会话
         </button>
       </div>
     );
-  }
-
-  const allMessages = [...activeSession.messages];
-  if (isGenerating && streamingText) {
-    const lastMsg = allMessages[allMessages.length - 1];
-    if (lastMsg?.role === "assistant") {
-      allMessages[allMessages.length - 1] = {
-        ...lastMsg,
-        content: streamingText,
-      };
-    }
   }
 
   return (
@@ -207,7 +259,7 @@ export default function ChatPage() {
         </div>
 
         <MessageThread
-          messages={allMessages}
+          messages={activeSession.messages}
           isGenerating={isGenerating}
           streamingText={streamingText}
           messagesEndRef={messagesEndRef}
@@ -218,12 +270,15 @@ export default function ChatPage() {
         <Composer
           input={input}
           isGenerating={isGenerating}
+          knowledgeScope={runtimeContext?.scope || activeSession.scope || "默认知识库"}
+          topK={chatSettings.default_top_k}
+          temperature={chatSettings.default_temperature}
           onInputChange={setInput}
           onSend={handleSend}
         />
       </section>
 
-      <ContextPanel activeSession={activeSession} />
+      <ContextPanel context={runtimeContext} activeSession={activeSession} />
     </div>
   );
 }

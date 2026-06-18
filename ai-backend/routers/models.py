@@ -84,7 +84,11 @@ async def create_provider(data: dict):
     try:
         try:
             await db.execute(
-                "INSERT INTO model_providers (id, name, type, endpoint, api_key, status) VALUES (?, ?, ?, ?, ?, ?)",
+                """
+                INSERT INTO model_providers
+                    (id, name, type, endpoint, api_key, status)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
                 (
                     provider_id,
                     name,
@@ -173,7 +177,10 @@ async def test_connection(provider_id: str):
 
         provider = dict(rows[0])
         try:
-            models = await fetch_openai_models(provider.get("endpoint", ""), provider.get("api_key", ""))
+            models = await fetch_openai_models(
+                provider.get("endpoint", ""),
+                provider.get("api_key", ""),
+            )
             await _set_provider_status(db, provider_id, "connected")
             return {"ok": True, "status": "connected", "fetched": len(models)}
         except ModelProviderError as exc:

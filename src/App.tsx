@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, ChevronDown, Search, ShieldCheck } from "lucide-react";
 import Sidebar, { type PageKey } from "./components/layout/Sidebar";
 import ChatPage from "./pages/ChatPage";
@@ -6,6 +6,7 @@ import KnowledgePage from "./pages/KnowledgePage";
 import ModelPage from "./pages/ModelPage";
 import HistoryPage from "./pages/HistoryPage";
 import SettingsPage from "./pages/SettingsPage";
+import { api } from "./services/api";
 import "./App.css";
 
 const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
@@ -33,7 +34,15 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
 
 function App() {
   const [activePage, setActivePage] = useState<PageKey>("chat");
+  const [defaultModel, setDefaultModel] = useState("默认模型");
   const page = pageTitles[activePage];
+
+  useEffect(() => {
+    api.settings
+      .get()
+      .then((settings) => setDefaultModel(settings.default_llm_model || "默认模型"))
+      .catch(() => setDefaultModel("默认模型"));
+  }, []);
 
   const renderPage = () => {
     switch (activePage) {
@@ -71,7 +80,7 @@ function App() {
               <input aria-label="全局搜索" placeholder="搜索会话、知识库、模型" />
             </label>
             <button className="model-pill" type="button">
-              GPT-4.1 Enterprise
+              {defaultModel}
               <ChevronDown size={16} />
             </button>
             <button className="icon-button" title="安全审计" type="button">

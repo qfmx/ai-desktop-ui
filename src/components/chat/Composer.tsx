@@ -3,11 +3,22 @@ import { Database, Paperclip, Send, ShieldCheck } from "lucide-react";
 interface ComposerProps {
   input: string;
   isGenerating: boolean;
+  knowledgeScope: string;
+  topK: number;
+  temperature: number;
   onInputChange: (value: string) => void;
   onSend: () => void;
 }
 
-export function Composer({ input, isGenerating, onInputChange, onSend }: ComposerProps) {
+export function Composer({
+  input,
+  isGenerating,
+  knowledgeScope,
+  topK,
+  temperature,
+  onInputChange,
+  onSend,
+}: ComposerProps) {
   return (
     <div className="composer-panel">
       <div className="composer-tools">
@@ -16,7 +27,7 @@ export function Composer({ input, isGenerating, onInputChange, onSend }: Compose
         </button>
         <button className="tool-chip active" type="button">
           <Database size={15} />
-          售后工单库
+          {knowledgeScope}
         </button>
         <button className="tool-chip" type="button">
           <ShieldCheck size={15} />
@@ -36,7 +47,9 @@ export function Composer({ input, isGenerating, onInputChange, onSend }: Compose
         placeholder="在这里输入您的问题..."
       />
       <footer>
-        <span>Top-K 8 · 温度 0.4 · 引用溯源开启</span>
+        <span>
+          Top-K {topK} · 温度 {temperature.toFixed(1)} · 引用溯源开启
+        </span>
         <button
           className="send-button"
           disabled={!input.trim() || isGenerating}

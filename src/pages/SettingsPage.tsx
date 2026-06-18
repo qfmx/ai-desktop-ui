@@ -22,26 +22,55 @@ const sections = [
 
 type SectionId = (typeof sections)[number]["id"];
 
+type StorageItem = {
+  label: string;
+  value: string;
+  width: number;
+};
+
+type PromptTemplate = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+const defaultPrompt =
+  "你是企业 AI 工作台助手。回答应基于授权知识库，重要结论需要给出来源；当证据不足时明确说明不确定性。";
+
 export default function SettingsPage() {
   const [section, setSection] = useState<SectionId>("general");
   const { theme, setTheme } = useTheme();
+  const [language, setLanguage] = useState("zh-CN");
   const [autoSave, setAutoSave] = useState(true);
   const [restoreSession, setRestoreSession] = useState(true);
   const [audit, setAudit] = useState(true);
   const [masking, setMasking] = useState(true);
   const [notify, setNotify] = useState(true);
   const [sound, setSound] = useState(false);
-  const [systemPrompt, setSystemPrompt] = useState(
-    "你是企业 AI 工作台助手。回答应基于授权知识库，重要结论需要给出来源；当证据不足时明确说明不确定性。"
-  );
+  const [retentionDays, setRetentionDays] = useState(180);
+  const [systemPrompt, setSystemPrompt] = useState(defaultPrompt);
+  const [storageItems, setStorageItems] = useState<StorageItem[]>([]);
+  const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.settings
-      .get()
-      .then((s) => {
-        setAudit(s.audit_enabled ?? true);
-        setMasking(s.masking_enabled ?? true);
+    void Promise.all([
+      api.settings.get(),
+      api.settings.storage(),
+      api.settings.promptTemplates(),
+    ])
+      .then(([settings, storage, templates]) => {
+        setLanguage(settings.language ?? "zh-CN");
+        setAutoSave(settings.auto_save ?? true);
+        setRestoreSession(settings.restore_session ?? true);
+        setAudit(settings.audit_enabled ?? true);
+        setMasking(settings.masking_enabled ?? true);
+        setNotify(settings.notifications_enabled ?? true);
+        setSound(settings.sound_enabled ?? false);
+        setRetentionDays(settings.data_retention_days ?? 180);
+        setSystemPrompt(settings.system_prompt ?? defaultPrompt);
+        setStorageItems(storage);
+        setPromptTemplates(templates);
       })
       .catch(() => {});
   }, []);
@@ -50,8 +79,15 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await api.settings.save({
+        language,
+        auto_save: autoSave,
+        restore_session: restoreSession,
         audit_enabled: audit,
         masking_enabled: masking,
+        notifications_enabled: notify,
+        sound_enabled: sound,
+        data_retention_days: retentionDays,
+        system_prompt: systemPrompt,
       });
     } finally {
       setSaving(false);
@@ -94,7 +130,7 @@ export default function SettingsPage() {
                 <strong>界面主题</strong>
                 <small>选择应用的外观风格</small>
               </span>
-              <select value={theme} onChange={(e) => setTheme(e.target.value as "light" | "dark")}>
+              <select value={theme} onChange={(event) => setTheme(event.target.value as "light" | "dark")}>
                 <option value="dark">暗色 (Dark)</option>
                 <option value="light">亮色 (Light)</option>
               </select>
@@ -104,7 +140,7 @@ export default function SettingsPage() {
                 <strong>界面语言</strong>
                 <small>设置应用显示语言</small>
               </span>
-              <select defaultValue="zh-CN">
+              <select value={language} onChange={(event) => setLanguage(event.target.value)}>
                 <option value="zh-CN">简体中文</option>
                 <option value="en-US">English</option>
               </select>
@@ -124,13 +160,14 @@ export default function SettingsPage() {
             </header>
             <label className="prompt-editor">
               <span>默认系统提示词</span>
-              <textarea onChange={(e) => setSystemPrompt(e.target.value)} rows={7} value={systemPrompt} />
+              <textarea onChange={(event) => setSystemPrompt(event.target.value)} rows={7} value={systemPrompt} />
               <small>{systemPrompt.length} 字符</small>
             </label>
             <div className="role-template-grid">
-              {["技术专家", "法务审查", "运营分析", "会议纪要"].map((role) => (
-                <button key={role} type="button">
-                  {role}
+              {promptTemplates.map((template) => (
+                <button key={template.id} onClick={() => setSystemPrompt(template.description)} type="button">
+                  <strong>{template.name}</strong>
+                  <small>{template.description}</small>
                 </button>
               ))}
             </div>
@@ -152,10 +189,10 @@ export default function SettingsPage() {
                 <strong>数据保留周期</strong>
                 <small>控制对话和审计日志的保留时间</small>
               </span>
-              <select defaultValue="180">
-                <option value="90">90 天</option>
-                <option value="180">180 天</option>
-                <option value="365">365 天</option>
+              <select value={retentionDays} onChange={(event) => setRetentionDays(Number(event.target.value))}>
+                <option value={90}>90 天</option>
+                <option value={180}>180 天</option>
+                <option value={365}>365 天</option>
               </select>
             </div>
           </>
@@ -183,11 +220,7 @@ export default function SettingsPage() {
               </div>
             </header>
             <div className="storage-grid">
-              {[
-                { label: "会话数据", value: "2.1 GB", width: 35 },
-                { label: "知识库索引", value: "12.4 GB", width: 68 },
-                { label: "审计日志", value: "340 MB", width: 12 },
-              ].map((item) => (
+              {storageItems.map((item) => (
                 <article className="storage-card" key={item.label}>
                   <span>{item.label}</span>
                   <strong>{item.value}</strong>

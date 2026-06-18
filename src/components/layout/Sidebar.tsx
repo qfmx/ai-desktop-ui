@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BookOpen,
   ChevronLeft,
@@ -12,6 +12,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
+import { api } from "../../services/api";
 
 export type PageKey = "chat" | "knowledge" | "model" | "history" | "settings";
 
@@ -37,6 +38,20 @@ const navItems: NavItem[] = [
 
 export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [serviceOnline, setServiceOnline] = useState(false);
+  const [auditEnabled, setAuditEnabled] = useState(false);
+
+  useEffect(() => {
+    void Promise.all([api.health(), api.settings.get()])
+      .then(([, settings]) => {
+        setServiceOnline(true);
+        setAuditEnabled(Boolean(settings.audit_enabled));
+      })
+      .catch(() => {
+        setServiceOnline(false);
+        setAuditEnabled(false);
+      });
+  }, []);
 
   return (
     <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
@@ -83,9 +98,9 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
           <>
             <div className="status-line">
               <span className="status-dot" />
-              <strong>全部服务在线</strong>
+              <strong>{serviceOnline ? "后端服务在线" : "等待后端连接"}</strong>
             </div>
-            <p>GPU 23% · 内存 4.2GB · 审计开启</p>
+            <p>{auditEnabled ? "审计开启" : "审计关闭"} · 数据本地持久化</p>
           </>
         )}
       </section>
