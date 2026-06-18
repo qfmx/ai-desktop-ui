@@ -1,103 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Bot,
-  Copy,
-  Cpu,
-  Database,
-  FileText,
-  MessageSquare,
-  Paperclip,
-  RefreshCw,
-  Send,
-  ShieldCheck,
-  Sparkles,
-  ThumbsDown,
-  ThumbsUp,
-  UserRound,
-  Workflow,
-  Zap,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MessageSquare, Zap } from "lucide-react";
+import { api } from "../services/api";
 
-type Message = {
-  id: string;
-  role: "user" | "assistant";
-  author: string;
-  content: string;
-  time: string;
-  model?: string;
-  tokens?: number;
-  citations?: string[];
-};
-
-type ChatSession = {
-  id: string;
-  title: string;
-  scope: string;
-  model: string;
-  messages: Message[];
-};
-
-const initialSessions: ChatSession[] = [
-  {
-    id: "delivery-risk",
-    title: "交付延期风险归因",
-    scope: "售后工单库",
-    model: "GPT-4.1",
-    messages: [
-      {
-        id: "m1",
-        role: "user",
-        author: "运营负责人",
-        content: "把上周客户反馈中关于交付延期的主要原因做一个归纳，并引用对应工单。",
-        time: "10:24",
-      },
-      {
-        id: "m2",
-        role: "assistant",
-        author: "Enterprise AI",
-        content:
-          "已基于售后工单知识库完成聚类。主要原因集中在供应链排期变更、客户侧验收窗口延后、跨区域物流节点拥堵三类。",
-        time: "10:24",
-        model: "GPT-4.1",
-        tokens: 428,
-        citations: ["CS-2026-1182", "CS-2026-1207", "CS-2026-1221"],
-      },
-      {
-        id: "m3",
-        role: "assistant",
-        author: "Enterprise AI",
-        content:
-          "建议将高频延误场景同步到交付风险看板，并为华东区新增提前 48 小时预警规则。",
-        time: "10:25",
-        model: "GPT-4.1",
-        tokens: 196,
-        citations: ["SOP-DELIVERY-08", "RISK-OPS-14"],
-      },
-    ],
-  },
-  {
-    id: "contract-review",
-    title: "合同风险条款识别",
-    scope: "法务合同库",
-    model: "Claude 3.5 Sonnet",
-    messages: [
-      {
-        id: "m4",
-        role: "user",
-        author: "法务经理",
-        content: "检查这份采购合同中的交付、违约和数据安全条款。",
-        time: "昨天 16:12",
-      },
-    ],
-  },
-  {
-    id: "meeting-summary",
-    title: "季度经营会纪要",
-    scope: "企业制度与会议纪要",
-    model: "GPT-4.1",
-    messages: [],
-  },
-];
+import { SessionList } from "../components/chat/SessionList";
+import { MessageThread } from "../components/chat/MessageThread";
+import { Composer } from "../components/chat/Composer";
+import { ContextPanel } from "../components/chat/ContextPanel";
+import type { ChatSession, Message } from "../components/chat/types";
 
 const quickActions = [
   { title: "制度问答", prompt: "请解释差旅报销流程中需要主管审批的场景。" },
@@ -105,32 +14,70 @@ const quickActions = [
   { title: "工单分析", prompt: "汇总最近 7 天交付延期工单的主要原因。" },
 ];
 
-const pipeline = [
-  { label: "意图识别", value: "已完成", tone: "green" },
-  { label: "知识检索", value: "18 条", tone: "cyan" },
-  { label: "权限过滤", value: "已通过", tone: "amber" },
-  { label: "响应生成", value: "流式", tone: "rose" },
-];
-
 export default function ChatPage() {
-  const [sessions, setSessions] = useState<ChatSession[]>(initialSessions);
-  const [activeId, setActiveId] = useState(initialSessions[0].id);
-  const [input, setInput] = useState("请基于售后工单库，生成交付延期风险的处理建议。");
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeId, setActiveId] = useState("");
+  const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [backendOk, setBackendOk] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    api.waitForBackend(15, 1000).then(setBackendOk);
+  }, []);
+
+  useEffect(() => {
+    if (!backendOk) return;
+    api.chat.sessions().then((list: any[]) => {
+      if (list.length > 0) {
+        setSessions(
+          list.map((s: any) => ({
+            ...s,
+            tags: typeof s.tags === "string" ? JSON.parse(s.tags) : s.tags,
+            messages: [],
+          }))
+        );
+        setActiveId(list[0].id);
+      }
+    });
+  }, [backendOk]);
 
   const activeSession = useMemo(
-    () => sessions.find((session) => session.id === activeId) ?? sessions[0],
-    [activeId, sessions],
+    () => sessions.find((s) => s.id === activeId) ?? sessions[0],
+    [activeId, sessions]
   );
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeSession.messages.length, isGenerating]);
+    if (!activeId || !backendOk) return;
+    api.chat.session(activeId).then((s: any) => {
+      setSessions((prev) =>
+        prev.map((session) =>
+          session.id === activeId
+            ? {
+                ...session,
+                messages: (s.messages ?? []).map((m: any) => ({
+                  ...m,
+                  citations:
+                    typeof m.citations === "string"
+                      ? JSON.parse(m.citations)
+                      : m.citations,
+                })),
+              }
+            : session
+        )
+      );
+    });
+  }, [activeId, backendOk]);
 
-  const handleSend = () => {
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeSession?.messages.length, streamingText, isGenerating]);
+
+  const handleSend = useCallback(() => {
     const content = input.trim();
-    if (!content || isGenerating) return;
+    if (!content || isGenerating || !activeSession) return;
 
     const userMessage: Message = {
       id: `u-${Date.now()}`,
@@ -141,61 +88,110 @@ export default function ChatPage() {
     };
 
     setSessions((prev) =>
-      prev.map((session) =>
-        session.id === activeSession.id
-          ? { ...session, messages: [...session.messages, userMessage] }
-          : session,
-      ),
+      prev.map((s) =>
+        s.id === activeSession.id
+          ? { ...s, messages: [...s.messages, userMessage] }
+          : s
+      )
     );
     setInput("");
     setIsGenerating(true);
+    setStreamingText("");
 
-    window.setTimeout(() => {
-      const assistantMessage: Message = {
-        id: `a-${Date.now()}`,
-        role: "assistant",
-        author: "Enterprise AI",
-        content:
-          "已生成处理建议: 优先建立延期风险分层、在交付节点前置客户确认、将供应链变更纳入 48 小时预警，并把重复工单同步给区域负责人。",
-        time: "现在",
-        model: activeSession.model,
-        tokens: 238,
-        citations: ["CS-2026-1207", "SOP-DELIVERY-08", "RISK-OPS-14"],
-      };
+    const assistantId = `a-${Date.now()}`;
 
-      setSessions((prev) =>
-        prev.map((session) =>
-          session.id === activeSession.id
-            ? { ...session, messages: [...session.messages, assistantMessage] }
-            : session,
-        ),
-      );
-      setIsGenerating(false);
-    }, 700);
+    streamRef.current = api.chat.askStream(
+      {
+        question: content,
+        session_id: activeSession.id,
+        model: activeSession.model || undefined,
+      },
+      (token: string) => {
+        setStreamingText((prev) => prev + token);
+      },
+      (result: any) => {
+        setStreamingText("");
+        setIsGenerating(false);
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === activeSession.id
+              ? {
+                  ...s,
+                  messages: [
+                    ...s.messages,
+                    {
+                      id: assistantId,
+                      role: "assistant",
+                      author: "Enterprise AI",
+                      content: result.content,
+                      time: "现在",
+                      model: result.model,
+                      citations: result.citations?.map((c: any) => c.id || c.content) ?? [],
+                    },
+                  ],
+                }
+              : s
+          )
+        );
+      },
+      () => {
+        setIsGenerating(false);
+        setStreamingText("");
+      }
+    );
+  }, [input, isGenerating, activeSession]);
+
+  const handleNewSession = async () => {
+    const id = `session-${Date.now()}`;
+    await api.chat.create({ id, title: "新会话", model: "gpt-4o-mini" });
+    setSessions((prev) => [
+      { id, title: "新会话", scope: "", model: "gpt-4o-mini", messages: [] },
+      ...prev,
+    ]);
+    setActiveId(id);
   };
+
+  if (!backendOk) {
+    return (
+      <div className="workspace-page" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+        <div style={{ textAlign: "center" }}>
+          <Zap size={48} style={{ opacity: 0.3, marginBottom: 16 }} />
+          <h2>正在启动后端服务...</h2>
+          <p style={{ opacity: 0.6 }}>请在 ai-backend 目录运行 <code>uv run python main.py</code></p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!activeSession) {
+    return (
+      <div className="workspace-page" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <button className="primary-action" onClick={handleNewSession} type="button">
+          <MessageSquare size={17} /> 创建第一个会话
+        </button>
+      </div>
+    );
+  }
+
+  const allMessages = [...activeSession.messages];
+  if (isGenerating && streamingText) {
+    const lastMsg = allMessages[allMessages.length - 1];
+    if (lastMsg?.role === "assistant") {
+      allMessages[allMessages.length - 1] = {
+        ...lastMsg,
+        content: streamingText,
+      };
+    }
+  }
 
   return (
     <div className="chat-layout">
-      <aside className="session-panel">
-        <button className="primary-action" type="button">
-          <MessageSquare size={17} />
-          新建会话
-        </button>
-        <div className="session-list">
-          {sessions.map((session) => (
-            <button
-              className={`session-card ${session.id === activeId ? "active" : ""}`}
-              key={session.id}
-              onClick={() => setActiveId(session.id)}
-              type="button"
-            >
-              <strong>{session.title}</strong>
-              <span>{session.scope}</span>
-              <small>{session.model} · {session.messages.length} 条消息</small>
-            </button>
-          ))}
-        </div>
-      </aside>
+      <SessionList
+        sessions={sessions}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onNewSession={handleNewSession}
+      />
 
       <section className="chat-surface">
         <div className="chat-toolbar">
@@ -210,140 +206,24 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="message-thread">
-          {activeSession.messages.length === 0 && (
-            <div className="prompt-grid">
-              {quickActions.map((action) => (
-                <button
-                  className="prompt-card"
-                  key={action.title}
-                  onClick={() => setInput(action.prompt)}
-                  type="button"
-                >
-                  <Sparkles size={18} />
-                  <strong>{action.title}</strong>
-                  <span>{action.prompt}</span>
-                </button>
-              ))}
-            </div>
-          )}
+        <MessageThread
+          messages={allMessages}
+          isGenerating={isGenerating}
+          streamingText={streamingText}
+          messagesEndRef={messagesEndRef}
+          quickActions={quickActions}
+          onQuickAction={setInput}
+        />
 
-          {activeSession.messages.map((message) => (
-            <article className={`message-row ${message.role}`} key={message.id}>
-              <div className="avatar">
-                {message.role === "assistant" ? <Bot size={18} /> : <UserRound size={17} />}
-              </div>
-              <div className="message-bubble">
-                <header>
-                  <strong>{message.author}</strong>
-                  <span>{message.time}</span>
-                  {message.model && <em>{message.model}</em>}
-                </header>
-                <p>{message.content}</p>
-                {message.citations && (
-                  <div className="citation-list">
-                    {message.citations.map((citation) => (
-                      <button key={citation} type="button">
-                        <FileText size={14} />
-                        {citation}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {message.role === "assistant" && (
-                  <div className="message-actions">
-                    <button title="复制" type="button"><Copy size={14} /></button>
-                    <button title="重新生成" type="button"><RefreshCw size={14} /></button>
-                    <button title="有帮助" type="button"><ThumbsUp size={14} /></button>
-                    <button title="无帮助" type="button"><ThumbsDown size={14} /></button>
-                    {message.tokens && <span>{message.tokens} tokens</span>}
-                  </div>
-                )}
-              </div>
-            </article>
-          ))}
-
-          {isGenerating && (
-            <div className="generating-line">
-              <span />
-              <strong>正在生成响应</strong>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="composer-panel">
-          <div className="composer-tools">
-            <button className="icon-button" title="添加附件" type="button">
-              <Paperclip size={17} />
-            </button>
-            <button className="tool-chip active" type="button">
-              <Database size={15} />
-              售后工单库
-            </button>
-            <button className="tool-chip" type="button">
-              <ShieldCheck size={15} />
-              权限检查
-            </button>
-          </div>
-          <textarea
-            aria-label="输入问题"
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                handleSend();
-              }
-            }}
-            value={input}
-          />
-          <footer>
-            <span>Top-K 8 · 温度 0.4 · 引用溯源开启</span>
-            <button className="send-button" disabled={!input.trim() || isGenerating} onClick={handleSend} type="button">
-              <Send size={17} />
-              发送
-            </button>
-          </footer>
-        </div>
+        <Composer
+          input={input}
+          isGenerating={isGenerating}
+          onInputChange={setInput}
+          onSend={handleSend}
+        />
       </section>
 
-      <aside className="context-panel">
-        <section className="side-section">
-          <header>
-            <span className="eyebrow">Runtime</span>
-            <h3>响应编排</h3>
-          </header>
-          <div className="pipeline-list">
-            {pipeline.map((item) => (
-              <div className="pipeline-step" data-tone={item.tone} key={item.label}>
-                <span />
-                <strong>{item.label}</strong>
-                <em>{item.value}</em>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="side-section">
-          <header>
-            <span className="eyebrow">Routing</span>
-            <h3>模型路由</h3>
-          </header>
-          <div className="route-list">
-            <div><Cpu size={16} /><span>主模型</span><strong>GPT-4.1</strong></div>
-            <div><Database size={16} /><span>向量模型</span><strong>text-embedding-3-large</strong></div>
-            <div><Workflow size={16} /><span>重排模型</span><strong>bge-reranker-v2</strong></div>
-          </div>
-        </section>
-
-        <section className="side-section audit-ok">
-          <Zap size={18} />
-          <span>
-            <strong>审计链路已记录</strong>
-            <small>请求、检索、引用和权限策略完整留痕</small>
-          </span>
-        </section>
-      </aside>
+      <ContextPanel activeSession={activeSession} />
     </div>
   );
 }

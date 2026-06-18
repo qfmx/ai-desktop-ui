@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
   Database,
@@ -12,8 +12,7 @@ import {
   ShieldCheck,
   Upload,
 } from "lucide-react";
-
-type KnowledgeStatus = "ready" | "syncing" | "warning";
+import { api } from "../services/api";
 
 type KnowledgeBase = {
   id: string;
@@ -22,7 +21,7 @@ type KnowledgeBase = {
   documents: number;
   chunks: number;
   size: string;
-  status: KnowledgeStatus;
+  status: "ready" | "syncing" | "warning";
   owner: string;
   updatedAt: string;
   embedding: string;
@@ -30,75 +29,47 @@ type KnowledgeBase = {
   tags: string[];
 };
 
-const bases: KnowledgeBase[] = [
-  {
-    id: "policy",
-    name: "企业制度与流程",
-    description: "覆盖人事、财务、采购、行政与交付流程的内部制度文档。",
-    documents: 1482,
-    chunks: 42180,
-    size: "3.6 GB",
-    status: "syncing",
-    owner: "综合管理部",
-    updatedAt: "12 分钟前",
-    embedding: "text-embedding-3-large",
-    health: 86,
-    tags: ["制度", "流程", "全员"],
-  },
-  {
-    id: "legal",
-    name: "法务合同库",
-    description: "采购、销售、数据处理协议与供应商模板的结构化合同知识。",
-    documents: 864,
-    chunks: 21904,
-    size: "1.8 GB",
-    status: "ready",
-    owner: "法务部",
-    updatedAt: "今天 09:40",
-    embedding: "bge-large-zh-v1.5",
-    health: 98,
-    tags: ["合同", "合规", "权限"],
-  },
-  {
-    id: "support",
-    name: "售后工单库",
-    description: "客户反馈、工单处理、交付延期、区域服务质量相关数据。",
-    documents: 24190,
-    chunks: 183430,
-    size: "12.4 GB",
-    status: "ready",
-    owner: "客户成功部",
-    updatedAt: "今天 08:15",
-    embedding: "text-embedding-3-large",
-    health: 94,
-    tags: ["工单", "客户", "交付"],
-  },
-  {
-    id: "research",
-    name: "行业研究资料",
-    description: "市场研究、竞品分析、行业政策与技术趋势报告。",
-    documents: 326,
-    chunks: 12048,
-    size: "5.2 GB",
-    status: "warning",
-    owner: "战略部",
-    updatedAt: "昨天 18:20",
-    embedding: "bge-m3",
-    health: 72,
-    tags: ["研究", "市场", "战略"],
-  },
-];
-
-const statusMap: Record<KnowledgeStatus, string> = {
+const statusMap: Record<string, string> = {
   ready: "可用",
   syncing: "同步中",
   warning: "需复核",
 };
 
 export default function KnowledgePage() {
+  const [bases, setBases] = useState<KnowledgeBase[]>([]);
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [selectedId, setSelectedId] = useState("support");
+  const [selectedId, setSelectedId] = useState("");
+  const [backendOk, setBackendOk] = useState(false);
+
+  useEffect(() => {
+    api.health()
+      .then(() => setBackendOk(true))
+      .catch(() => setBackendOk(false));
+  }, []);
+
+  useEffect(() => {
+    if (!backendOk) return;
+    api.knowledge.bases().then((list) => {
+      setBases(
+        list.map((b: any) => ({
+          id: b.id,
+          name: b.name,
+          description: b.description,
+          documents: b.documents ?? 0,
+          chunks: 0,
+          size: "—",
+          status: b.status || "ready",
+          owner: b.owner || "",
+          updatedAt: b.updated_at || "",
+          embedding: b.embedding_model || "",
+          health: b.status === "ready" ? 94 : b.status === "syncing" ? 86 : 72,
+          tags: typeof b.tags === "string" ? JSON.parse(b.tags) : b.tags || [],
+        }))
+      );
+      if (list.length > 0) setSelectedId(list[0].id);
+    });
+  }, [backendOk]);
 
   const filteredBases = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -107,12 +78,19 @@ export default function KnowledgePage() {
       [base.name, base.description, base.owner, ...base.tags]
         .join(" ")
         .toLowerCase()
-        .includes(keyword),
+        .includes(keyword)
     );
-  }, [query]);
+  }, [query, bases]);
 
   const totalDocuments = bases.reduce((sum, base) => sum + base.documents, 0);
-  const totalChunks = bases.reduce((sum, base) => sum + base.chunks, 0);
+
+  if (!backendOk) {
+    return (
+      <div className="workspace-page" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+        <p style={{ opacity: 0.6 }}>正在连接后端服务...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="workspace-page">
@@ -130,7 +108,7 @@ export default function KnowledgePage() {
         <article className="summary-card" data-tone="amber">
           <Layers3 size={20} />
           <span>切片总量</span>
-          <strong>{totalChunks.toLocaleString()}</strong>
+          <strong>—</strong>
         </article>
         <article className="summary-card" data-tone="rose">
           <ShieldCheck size={20} />
@@ -151,32 +129,19 @@ export default function KnowledgePage() {
         </label>
         <div className="toolbar-buttons">
           <button className="secondary-action" type="button">
-            <Filter size={16} />
-            筛选
+            <Filter size={16} /> 筛选
           </button>
           <button className="secondary-action" type="button">
-            <RefreshCw size={16} />
-            重建索引
+            <RefreshCw size={16} /> 重建索引
           </button>
           <button className="primary-action compact" type="button">
-            <Upload size={16} />
-            上传文档
+            <Upload size={16} /> 上传文档
           </button>
           <div className="view-toggle">
-            <button
-              className={viewMode === "grid" ? "active" : ""}
-              onClick={() => setViewMode("grid")}
-              title="网格"
-              type="button"
-            >
+            <button className={viewMode === "grid" ? "active" : ""} onClick={() => setViewMode("grid")} title="网格" type="button">
               <Grid3X3 size={16} />
             </button>
-            <button
-              className={viewMode === "list" ? "active" : ""}
-              onClick={() => setViewMode("list")}
-              title="列表"
-              type="button"
-            >
+            <button className={viewMode === "list" ? "active" : ""} onClick={() => setViewMode("list")} title="列表" type="button">
               <List size={16} />
             </button>
           </div>
@@ -205,7 +170,7 @@ export default function KnowledgePage() {
             </div>
             <div className="knowledge-meta">
               <span>{base.documents.toLocaleString()} 文档</span>
-              <span>{base.chunks.toLocaleString()} 切片</span>
+              <span>— 切片</span>
               <span>{base.size}</span>
             </div>
             <div className="health-row">
@@ -238,24 +203,14 @@ export default function KnowledgePage() {
             <span>可访问角色</span>
             <span>策略</span>
           </div>
-          <div className="matrix-row">
-            <span>法务合同库</span>
-            <span>法务部</span>
-            <span>法务 · 管理层</span>
-            <strong>细粒度权限</strong>
-          </div>
-          <div className="matrix-row">
-            <span>售后工单库</span>
-            <span>客户成功部</span>
-            <span>售后 · 运营 · 交付</span>
-            <strong>脱敏后可读</strong>
-          </div>
-          <div className="matrix-row">
-            <span>企业制度与流程</span>
-            <span>综合管理部</span>
-            <span>全员</span>
-            <strong>全员可读</strong>
-          </div>
+          {filteredBases.slice(0, 3).map((base) => (
+            <div className="matrix-row" key={base.id}>
+              <span>{base.name}</span>
+              <span>{base.owner}</span>
+              <span>{base.owner} · 管理层</span>
+              <strong>全员可读</strong>
+            </div>
+          ))}
         </div>
       </section>
     </div>

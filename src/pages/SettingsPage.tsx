@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell,
   Database,
@@ -9,6 +9,8 @@ import {
   Shield,
   Upload,
 } from "lucide-react";
+import { api } from "../services/api";
+import { useTheme } from "../contexts/ThemeContext";
 
 const sections = [
   { id: "general", title: "通用设置", icon: Monitor, description: "语言、启动和界面偏好" },
@@ -22,6 +24,7 @@ type SectionId = (typeof sections)[number]["id"];
 
 export default function SettingsPage() {
   const [section, setSection] = useState<SectionId>("general");
+  const { theme, setTheme } = useTheme();
   const [autoSave, setAutoSave] = useState(true);
   const [restoreSession, setRestoreSession] = useState(true);
   const [audit, setAudit] = useState(true);
@@ -29,8 +32,31 @@ export default function SettingsPage() {
   const [notify, setNotify] = useState(true);
   const [sound, setSound] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState(
-    "你是企业 AI 工作台助手。回答应基于授权知识库，重要结论需要给出来源；当证据不足时明确说明不确定性。",
+    "你是企业 AI 工作台助手。回答应基于授权知识库，重要结论需要给出来源；当证据不足时明确说明不确定性。"
   );
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.settings
+      .get()
+      .then((s) => {
+        setAudit(s.audit_enabled ?? true);
+        setMasking(s.masking_enabled ?? true);
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveAll = async () => {
+    setSaving(true);
+    try {
+      await api.settings.save({
+        audit_enabled: audit,
+        masking_enabled: masking,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="settings-layout">
@@ -65,6 +91,16 @@ export default function SettingsPage() {
             </header>
             <div className="setting-row">
               <span>
+                <strong>界面主题</strong>
+                <small>选择应用的外观风格</small>
+              </span>
+              <select value={theme} onChange={(e) => setTheme(e.target.value as "light" | "dark")}>
+                <option value="dark">暗色 (Dark)</option>
+                <option value="light">亮色 (Light)</option>
+              </select>
+            </div>
+            <div className="setting-row">
+              <span>
                 <strong>界面语言</strong>
                 <small>设置应用显示语言</small>
               </span>
@@ -88,16 +124,14 @@ export default function SettingsPage() {
             </header>
             <label className="prompt-editor">
               <span>默认系统提示词</span>
-              <textarea
-                onChange={(event) => setSystemPrompt(event.target.value)}
-                rows={7}
-                value={systemPrompt}
-              />
+              <textarea onChange={(e) => setSystemPrompt(e.target.value)} rows={7} value={systemPrompt} />
               <small>{systemPrompt.length} 字符</small>
             </label>
             <div className="role-template-grid">
               {["技术专家", "法务审查", "运营分析", "会议纪要"].map((role) => (
-                <button key={role} type="button">{role}</button>
+                <button key={role} type="button">
+                  {role}
+                </button>
               ))}
             </div>
           </>
@@ -157,21 +191,29 @@ export default function SettingsPage() {
                 <article className="storage-card" key={item.label}>
                   <span>{item.label}</span>
                   <strong>{item.value}</strong>
-                  <div><i style={{ width: `${item.width}%` }} /></div>
+                  <div>
+                    <i style={{ width: `${item.width}%` }} />
+                  </div>
                 </article>
               ))}
             </div>
             <div className="data-actions">
-              <button className="secondary-action" type="button"><Download size={16} />导出数据</button>
-              <button className="secondary-action" type="button"><Upload size={16} />导入备份</button>
+              <button className="secondary-action" type="button">
+                <Download size={16} />
+                导出数据
+              </button>
+              <button className="secondary-action" type="button">
+                <Upload size={16} />
+                导入备份
+              </button>
             </div>
           </>
         )}
 
         <footer className="settings-footer">
-          <button className="primary-action compact" type="button">
+          <button className="primary-action compact" disabled={saving} onClick={saveAll} type="button">
             <Save size={16} />
-            保存设置
+            {saving ? "保存中..." : "保存设置"}
           </button>
         </footer>
       </section>
@@ -179,14 +221,17 @@ export default function SettingsPage() {
   );
 }
 
-type ToggleRowProps = {
+function ToggleRow({
+  checked,
+  label,
+  note,
+  onChange,
+}: {
   checked: boolean;
   label: string;
   note: string;
   onChange: () => void;
-};
-
-function ToggleRow({ checked, label, note, onChange }: ToggleRowProps) {
+}) {
   return (
     <label className="setting-row">
       <span>

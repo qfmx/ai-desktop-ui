@@ -1,10 +1,9 @@
 /* ============================================================
    AI Workspace — Global Design Tokens & Base Styles
-   Dark Tech Theme
    ============================================================ */
 
-:root {
-  /* ---- Color Palette ---- */
+:root, [data-theme="dark"] {
+  /* ---- Dark Tech Theme (Default) ---- */
   --bg-base:        #080b14;
   --bg-sidebar:     #0c1021;
   --bg-surface:     #111628;
@@ -36,7 +35,44 @@
   --gradient-accent: linear-gradient(135deg, #6366f1, #8b5cf6);
   --gradient-card:   linear-gradient(160deg, rgba(99,102,241,.06), rgba(139,92,246,.03));
   --gradient-glow:   radial-gradient(ellipse at 50% 0%, rgba(99,102,241,.12) 0%, transparent 60%);
+}
 
+[data-theme="light"] {
+  /* ---- Light Theme ---- */
+  --bg-base:        #f8fafc;
+  --bg-sidebar:     #f1f5f9;
+  --bg-surface:     #ffffff;
+  --bg-elevated:    #ffffff;
+  --bg-hover:       #e2e8f0;
+  --bg-active:      #cbd5e1;
+  --bg-input:       #ffffff;
+
+  --accent:         #4f46e5;
+  --accent-hover:   #4338ca;
+  --accent-soft:    rgba(79, 70, 229, .12);
+  --accent-glow:    rgba(79, 70, 229, .35);
+
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-muted:     #64748b;
+  --text-inverse:   #ffffff;
+
+  --border:         #e2e8f0;
+  --border-light:   #cbd5e1;
+  --border-focus:   var(--accent);
+
+  --success:        #10b981;
+  --warning:        #f59e0b;
+  --error:          #ef4444;
+  --info:           #3b82f6;
+
+  /* ---- Gradients ---- */
+  --gradient-accent: linear-gradient(135deg, #4f46e5, #7c3aed);
+  --gradient-card:   linear-gradient(160deg, rgba(79,70,229,.06), rgba(124,58,237,.03));
+  --gradient-glow:   radial-gradient(ellipse at 50% 0%, rgba(79,70,229,.12) 0%, transparent 60%);
+}
+
+:root {
   /* ---- Spacing ---- */
   --sidebar-width:       260px;
   --sidebar-collapsed:   68px;
@@ -80,6 +116,7 @@ html, body, #root { height: 100%; overflow: hidden; }
 body {
   background: var(--bg-base);
   color: var(--text-primary);
+  transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 
 a { color: var(--accent-hover); text-decoration: none; }

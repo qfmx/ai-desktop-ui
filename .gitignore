@@ -13,6 +13,10 @@ dist-ssr
 *.local
 release
 src-tauri/target
+.claude/
+ai-backend/.env
+ai-backend/.venv
+ai-backend/data/*.db
 
 # Editor directories and files
 .vscode/*

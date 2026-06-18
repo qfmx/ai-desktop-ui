@@ -1,0 +1,18 @@
+[project]
+name = "ai-backend"
+version = "1.0.0"
+description = "AI 工作台 - Python AI 后端引擎"
+requires-python = ">=3.11"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "fastapi>=0.115",
+    "httpx>=0.28.1",
+    "numpy>=2.4.6",
+    "pydantic-settings>=2.14.1",
+    "pyyaml>=6.0.3",
+    "sse-starlette>=2",
+    "uvicorn[standard]>=0.34",
+]
+
+[project.scripts]
+ai-backend = "main:main"
