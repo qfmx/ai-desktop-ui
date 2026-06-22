@@ -1,0 +1,411 @@
+# API 规格说明
+
+后端基础地址：
+
+```text
+http://127.0.0.1:18888
+```
+
+前端封装入口：
+
+```text
+src/services/api.ts
+```
+
+所有普通 JSON 请求默认带 `Content-Type: application/json`。流式问答使用 Server-Sent Events 格式返回 `data: {...}` 行。
+
+## 1. Health
+
+### GET `/api/health`
+
+用途：检查后端是否可用。
+
+响应：
+
+```json
+{
+  "status": "ok",
+  "app": "AI-Workspace"
+}
+```
+
+## 2. Chat
+
+### GET `/api/chat/quick-actions`
+
+用途：获取首页快捷问题。
+
+响应字段：
+
+- `id`
+- `title`
+- `prompt`
+
+### GET `/api/chat/runtime-context?session_id={id}`
+
+用途：获取当前会话的 pipeline、模型路由、审计状态和向量统计。
+
+响应字段：
+
+- `pipeline`: 运行步骤列表
+- `routing`: 模型路由列表
+- `audit`: 审计状态
+- `scope`: 当前知识范围
+- `stats`: 向量索引统计
+
+### GET `/api/chat/sessions`
+
+用途：获取会话列表，按 `updated_at DESC` 排序。
+
+### GET `/api/chat/sessions/{session_id}`
+
+用途：获取单个会话和消息列表。
+
+错误：
+
+- `404 Session not found`
+
+### POST `/api/chat/sessions`
+
+用途：创建会话。
+
+请求示例：
+
+```json
+{
+  "id": "session-001",
+  "title": "新会话",
+  "model": "gpt-4o-mini",
+  "scope": "",
+  "preview": "",
+  "tags": []
+}
+```
+
+响应：
+
+```json
+{
+  "ok": true,
+  "id": "session-001"
+}
+```
+
+### PATCH `/api/chat/sessions/{session_id}`
+
+用途：更新会话元数据。
+
+支持字段：
+
+- `title`
+- `model`
+- `scope`
+- `preview`
+- `starred`
+- `tags`
+
+### DELETE `/api/chat/sessions/{session_id}`
+
+用途：删除会话和关联消息。
+
+响应：
+
+```json
+{
+  "ok": true
+}
+```
+
+### POST `/api/chat/ask`
+
+用途：普通非流式 RAG 问答。
+
+请求示例：
+
+```json
+{
+  "question": "解释差旅报销流程",
+  "session_id": "session-001",
+  "knowledge_base_id": "policy",
+  "model": "gpt-4o-mini",
+  "top_k": 8
+}
+```
+
+响应字段：
+
+- `answer`
+- `citations`
+- `chunks_retrieved`
+- `model`
+
+错误：
+
+- `400 question is required`
+
+### POST `/api/chat/ask/stream`
+
+用途：流式 RAG 问答。
+
+请求字段同 `/api/chat/ask`。
+
+事件示例：
+
+```text
+data: {"type":"token","content":"这里是增量文本"}
+
+data: {"type":"done","content":"完整回答","model":"gpt-4o-mini","citations":[]}
+```
+
+说明：
+
+- 如果提供 `session_id`，后端会先写入 user message。
+- 结束时写入 assistant message，并更新会话 `message_count`、`preview` 和 `updated_at`。
+
+## 3. Knowledge
+
+### GET `/api/knowledge/bases`
+
+用途：获取知识库列表，附带 chunk 数、估算大小和健康度。
+
+响应字段：
+
+- `id`
+- `name`
+- `description`
+- `documents`
+- `embedding_model`
+- `status`
+- `owner`
+- `tags`
+- `chunks`
+- `size`
+- `health`
+
+### POST `/api/knowledge/bases`
+
+用途：创建知识库和默认访问策略。
+
+请求示例：
+
+```json
+{
+  "id": "policy",
+  "name": "企业制度与流程",
+  "description": "内部制度文档",
+  "embedding_model": "text-embedding-3-large",
+  "owner": "综合管理部",
+  "tags": ["制度", "流程"],
+  "access_roles": ["全员"],
+  "access_policy": "全员可读"
+}
+```
+
+### DELETE `/api/knowledge/bases/{base_id}`
+
+用途：删除知识库、权限策略和向量片段。
+
+响应字段：
+
+- `ok`
+- `chunks_removed`
+
+### POST `/api/knowledge/bases/{base_id}/upload`
+
+用途：通过后端可访问的本地文件路径上传文档。
+
+请求示例：
+
+```json
+{
+  "file_path": "E:\\EnterpriseAiWorkspace\\docs\\policy.md"
+}
+```
+
+响应字段：
+
+- `ok`
+- `chunks_added`
+
+错误：
+
+- `400 file_path is required`
+- 文件不存在时会抛出文件读取错误。
+
+### GET `/api/knowledge/stats`
+
+用途：获取知识库和向量索引统计。
+
+响应字段：
+
+- `bases`
+- `documents`
+- `chunks`
+- `vector_dim`
+
+### GET `/api/knowledge/access-matrix`
+
+用途：获取知识库访问矩阵。
+
+响应字段：
+
+- `id`
+- `name`
+- `owner`
+- `roles`
+- `policy`
+
+## 4. Models
+
+### GET `/api/models/providers`
+
+用途：获取模型供应商和模型配置。
+
+说明：
+
+- 响应中不会返回明文 API key。
+- 返回 `has_api_key` 和 `api_key_masked`。
+
+### POST `/api/models/providers`
+
+用途：创建模型供应商，可选自动同步模型。
+
+请求示例：
+
+```json
+{
+  "id": "openai-compatible",
+  "name": "OpenAI Compatible",
+  "type": "cloud",
+  "endpoint": "https://api.example.com/v1",
+  "api_key": "sk-...",
+  "auto_sync_models": true,
+  "protocol": "openai"
+}
+```
+
+响应字段：
+
+- `ok`
+- `provider`
+- `sync`
+
+错误：
+
+- `400 Provider name is required`
+- `400 Provider endpoint is required`
+- `409 Provider already exists`
+
+### POST `/api/models/providers/{provider_id}/test`
+
+用途：测试供应商连接。
+
+行为：
+
+- 请求 `{endpoint}/models`。
+- 成功后 provider 状态更新为 `connected`。
+- 失败后根据错误更新为 `offline` 或 `limited`。
+
+### POST `/api/models/providers/{provider_id}/sync-models`
+
+用途：从 OpenAI 兼容 `/models` 接口同步模型。
+
+请求示例：
+
+```json
+{
+  "protocol": "openai",
+  "overwrite": false
+}
+```
+
+响应字段：
+
+- `ok`
+- `provider_id`
+- `fetched`
+- `inserted`
+- `updated`
+- `models`
+
+### PATCH `/api/models/configs/{model_id}`
+
+用途：更新模型配置。
+
+支持字段：
+
+- `active`
+- `temperature`
+- `max_output`
+- `context_length`
+- `capabilities`
+
+错误：
+
+- `400 No supported fields to update`
+- `404 Model config not found`
+
+## 5. Settings
+
+### GET `/api/settings`
+
+用途：获取应用设置。
+
+响应字段：
+
+- `default_llm_model`
+- `default_temperature`
+- `default_top_k`
+- `audit_enabled`
+- `masking_enabled`
+- `model_fallback_enabled`
+- `trace_enabled`
+- `auto_save`
+- `restore_session`
+- `language`
+- `notifications_enabled`
+- `sound_enabled`
+- `data_retention_days`
+- `system_prompt`
+
+### POST `/api/settings`
+
+用途：保存任意 settings key/value。后端会以字符串形式写入 SQLite。
+
+请求示例：
+
+```json
+{
+  "default_temperature": 0.4,
+  "default_top_k": 8,
+  "audit_enabled": true
+}
+```
+
+响应：
+
+```json
+{
+  "ok": true
+}
+```
+
+### GET `/api/settings/prompt-templates`
+
+用途：获取提示词模板。
+
+响应字段：
+
+- `id`
+- `name`
+- `description`
+
+### GET `/api/settings/storage`
+
+用途：获取本地存储使用情况。
+
+响应字段：
+
+- `label`
+- `value`
+- `width`

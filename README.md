@@ -52,6 +52,12 @@ Generated build output is intentionally ignored by Git, including
 `release/`, `src-tauri/target/`, `src-tauri/binaries/`, `ai-backend/build/`,
 and `ai-backend/dist/`.
 
+## Documentation
+
+Project specs and engineering guides live in `docs/`. Start with
+`docs/README.md` for the reading order. Agent-oriented project instructions are
+in `AGENT.md`.
+
 ## Requirements
 
 - Node.js 18+
