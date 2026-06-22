@@ -273,7 +273,7 @@ async def ask_stream(data: dict):
         for chunk in chunks
     )
     system_prompt = (
-        "你是企业 AI 工作台助手。回答应基于以下知识库内容，重要结论需要给出引用来源；"
+        "你是企业 AI-Workspace 助手。回答应基于以下知识库内容，重要结论需要给出引用来源；"
         "当证据不足时明确说明不确定性。\n\n知识库内容：\n"
         + context
     )

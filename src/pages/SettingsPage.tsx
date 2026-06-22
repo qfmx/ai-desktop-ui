@@ -35,7 +35,7 @@ type PromptTemplate = {
 };
 
 const defaultPrompt =
-  "你是企业 AI 工作台助手。回答应基于授权知识库，重要结论需要给出来源；当证据不足时明确说明不确定性。";
+  "你是企业 AI-Workspace 助手。回答应基于授权知识库，重要结论需要给出来源；当证据不足时明确说明不确定性。";
 
 export default function SettingsPage() {
   const [section, setSection] = useState<SectionId>("general");

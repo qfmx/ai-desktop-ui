@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    app_name: str = "AI 工作台"
+    app_name: str = "AI-Workspace"
     host: str = "127.0.0.1"
     port: int = 18888
     log_level: str = "info"

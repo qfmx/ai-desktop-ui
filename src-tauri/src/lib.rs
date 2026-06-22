@@ -30,17 +30,46 @@ fn get_backend_url() -> String {
     BACKEND_URL.to_string()
 }
 
-fn find_python_backend() -> Option<(std::path::PathBuf, String, Vec<String>)> {
-    // 1. Check for PyInstaller sidecar binary next to the executable
+fn packaged_backend_work_dir(
+    app_handle: &tauri::AppHandle,
+    fallback: &std::path::Path,
+) -> std::path::PathBuf {
+    let work_dir = app_handle
+        .path()
+        .app_data_dir()
+        .unwrap_or_else(|_| fallback.to_path_buf());
+    let _ = std::fs::create_dir_all(&work_dir);
+    work_dir
+}
+
+fn find_python_backend(
+    app_handle: &tauri::AppHandle,
+) -> Option<(std::path::PathBuf, String, Vec<String>)> {
+    // 1. Check for the bundled PyInstaller sidecar next to the executable.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let sidecar = dir.join("binaries").join("ai-backend-x86_64-pc-windows-msvc.exe");
+            let sidecar = dir.join("ai-backend.exe");
             if sidecar.exists() {
-                return Some((dir.to_path_buf(), sidecar.to_string_lossy().to_string(), vec![]));
+                return Some((
+                    packaged_backend_work_dir(app_handle, dir),
+                    sidecar.to_string_lossy().to_string(),
+                    vec![],
+                ));
+            }
+
+            let legacy_sidecar = dir
+                .join("binaries")
+                .join("ai-backend-x86_64-pc-windows-msvc.exe");
+            if legacy_sidecar.exists() {
+                return Some((
+                    packaged_backend_work_dir(app_handle, dir),
+                    legacy_sidecar.to_string_lossy().to_string(),
+                    vec![],
+                ));
             }
         }
     }
-    // 2. Check for ai-backend dir with main.py and uv
+    // 2. Check for ai-backend dir with main.py and uv.
     if let Ok(cwd) = std::env::current_dir() {
         let main_py = cwd.join("ai-backend").join("main.py");
         if main_py.exists() {
@@ -63,7 +92,7 @@ pub fn run() {
         .setup(|app| {
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
-                if let Some((work_dir, program, args)) = find_python_backend() {
+                if let Some((work_dir, program, args)) = find_python_backend(&app_handle) {
                     match std::process::Command::new(&program)
                         .args(&args)
                         .current_dir(&work_dir)

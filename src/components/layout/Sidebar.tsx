@@ -61,7 +61,7 @@ export default function Sidebar({ activePage, onNavigate }: SidebarProps) {
         </div>
         {!collapsed && (
           <div className="brand-copy">
-            <strong>AI 工作台</strong>
+            <strong>AI-Workspace</strong>
             <span>Enterprise Console</span>
           </div>
         )}

@@ -1,7 +1,7 @@
 [project]
 name = "ai-backend"
-version = "1.0.0"
-description = "AI 工作台 - Python AI 后端引擎"
+version = "1.0.1"
+description = "AI-Workspace - Python AI 后端引擎"
 requires-python = ">=3.11"
 dependencies = [
     "aiosqlite>=0.22.1",

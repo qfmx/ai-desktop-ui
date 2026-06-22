@@ -10,9 +10,14 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+__pycache__/
+*.py[cod]
 *.local
 release
+ai-backend/build/
+ai-backend/dist/
 src-tauri/target
+src-tauri/binaries/
 .claude/
 ai-backend/.env
 ai-backend/.venv

@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 block_cipher = None
+backend_dir = Path(SPECPATH).resolve().parent
 
 datas = []
 hiddenimports = [
@@ -21,8 +22,8 @@ hiddenimports = [
 ]
 
 a = Analysis(
-    ["main.py"],
-    pathex=[],
+    [str(backend_dir / "main.py")],
+    pathex=[str(backend_dir)],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,

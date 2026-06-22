@@ -41,7 +41,7 @@ async def get_settings():
             "system_prompt": _setting(
                 overrides,
                 "system_prompt",
-                "你是企业 AI 工作台助手。回答应基于授权知识库，重要结论需要给出来源；当证据不足时明确说明不确定性。",
+                "你是企业 AI-Workspace 助手。回答应基于授权知识库，重要结论需要给出来源；当证据不足时明确说明不确定性。",
             ),
         }
     finally:

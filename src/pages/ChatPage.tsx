@@ -218,7 +218,8 @@ export default function ChatPage() {
           <Zap size={48} />
           <h2>正在连接后端服务</h2>
           <p>
-            请在 <code>ai-backend</code> 目录运行 <code>uv run python main.py</code>
+            打包版会自动启动后端；开发模式请在 <code>ai-backend</code> 目录运行{" "}
+            <code>uv run python main.py</code>
           </p>
         </div>
       </div>

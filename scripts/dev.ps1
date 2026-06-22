@@ -1,5 +1,5 @@
 # Start both Python backend and Tauri frontend for development
-Write-Host "Starting AI Desktop UI - Development Mode" -ForegroundColor Cyan
+Write-Host "Starting AI-Workspace - Development Mode" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 
 $rootDir = Split-Path -Parent $PSScriptRoot
