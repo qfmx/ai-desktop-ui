@@ -122,12 +122,12 @@ pnpm package:windows:collect
 release/windows/
 ```
 
-版本 `1.0.1` 的预期产物：
+版本 `1.0.2` 的预期产物：
 
-- `AI-Workspace_1.0.1_x64-setup.exe`
-- `AI-Workspace_1.0.1_x64_zh-CN.msi`
-- `AI-Workspace_1.0.1_x64_single.exe`
-- `AI-Workspace_1.0.1_x64_portable.zip`
+- `AI-Workspace_1.0.2_x64-setup.exe`
+- `AI-Workspace_1.0.2_x64_zh-CN.msi`
+- `AI-Workspace_1.0.2_x64_single.exe`
+- `AI-Workspace_1.0.2_x64_portable.zip`
 - `AI-Workspace-portable/`
 - `ai-backend.exe`
 

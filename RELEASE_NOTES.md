@@ -1,3 +1,34 @@
+# Release 1.0.2
+
+## Summary
+
+This release improves conversation history management and the model/provider
+configuration workflow while keeping session editing focused in the history page.
+
+## Changes
+
+- Added conversation history rename and tag editing.
+- Redesigned history filters with single-select archive state and multi-select tags.
+- Added double-click navigation from history rows back into the chat session view.
+- Removed rename and tag editing actions from the chat page session list.
+- Improved chat markdown rendering and model/provider management UI.
+- Updated backend model provider handling and related API/data specifications.
+- Bumped app, Tauri, Rust, and Python package versions to `1.0.2`.
+
+## Outputs
+
+- `AI-Workspace_1.0.2_x64-setup.exe`
+- `AI-Workspace_1.0.2_x64_zh-CN.msi`
+- `AI-Workspace_1.0.2_x64_single.exe`
+- `AI-Workspace_1.0.2_x64_portable.zip`
+- `AI-Workspace-portable/`
+- `ai-backend.exe`
+
+## Verification
+
+- `npm run build`
+- `pnpm package:windows`
+
 # Release 1.0.1
 
 ## Summary
