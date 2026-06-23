@@ -35,11 +35,12 @@ New-Item -ItemType File -Force .env
 `.env` 示例：
 
 ```dotenv
-AI_OPENAI_API_KEY=sk-...
-AI_OPENAI_BASE_URL=https://api.openai.com/v1
-AI_DEFAULT_LLM_MODEL=gpt-4o-mini
-AI_DEFAULT_EMBEDDING_MODEL=text-embedding-3-large
+AI_HOST=127.0.0.1
+AI_PORT=18888
+AI_DATA_DIR=data
 ```
+
+模型供应商、API key、Base URL 和默认模型请在应用的“模型配置”页面维护，不再写入 `.env`。
 
 ## 3. 一键启动
 
@@ -207,7 +208,8 @@ pnpm package:windows
 
 问答失败：
 
-- 如果使用 OpenAI 默认模型，需要配置 `AI_OPENAI_API_KEY`。
+- 在“模型配置”页面确认供应商的 Base URL、API Key、协议类型和连接测试结果。
+- 在“模型配置”页面确认默认聊天模型和默认 embedding 模型已经选择可用模型。
 - 如果知识库向量为空，检索不会返回引用。
 - 如果 embedding 调用失败，知识库上传和 RAG 检索都会失败。
 

@@ -9,6 +9,7 @@ import {
   UserRound,
 } from "lucide-react";
 import type { Message, QuickAction } from "../../types/chat";
+import { MarkdownContent } from "./MarkdownContent";
 
 interface MessageThreadProps {
   messages: Message[];
@@ -57,7 +58,7 @@ export function MessageThread({
               <span>{message.time}</span>
               {message.model && <em>{message.model}</em>}
             </header>
-            <p>{message.content}</p>
+            <MarkdownContent content={message.content} />
             {message.citations && message.citations.length > 0 && (
               <div className="citation-list">
                 {message.citations.map((citation) => (
@@ -99,7 +100,7 @@ export function MessageThread({
               <strong>Enterprise AI</strong>
               <span>现在</span>
             </header>
-            <p>{streamingText}</p>
+            <MarkdownContent content={streamingText} />
           </div>
         </article>
       )}

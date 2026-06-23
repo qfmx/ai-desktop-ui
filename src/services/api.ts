@@ -33,7 +33,17 @@ export const api = {
       request<any>(
         `/api/chat/runtime-context${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ""}`
       ),
-    sessions: () => request<any[]>("/api/chat/sessions"),
+    sessions: (params?: { include_archived?: boolean; archived?: boolean }) => {
+      const search = new URLSearchParams();
+      if (params?.include_archived !== undefined) {
+        search.set("include_archived", String(params.include_archived));
+      }
+      if (params?.archived !== undefined) {
+        search.set("archived", String(params.archived));
+      }
+      const query = search.toString();
+      return request<any[]>(`/api/chat/sessions${query ? `?${query}` : ""}`);
+    },
     session: (id: string) => request<any>(`/api/chat/sessions/${id}`),
     create: (data: any) =>
       request<any>("/api/chat/sessions", {
@@ -49,6 +59,7 @@ export const api = {
       question: string;
       session_id?: string;
       knowledge_base_id?: string;
+      model_config_id?: string;
       model?: string;
       top_k?: number;
     }) =>
@@ -57,17 +68,19 @@ export const api = {
         citations: any[];
         chunks_retrieved: number;
         model: string;
+        model_config_id: string;
       }>("/api/chat/ask", { method: "POST", body: JSON.stringify(data) }),
     askStream: (
       data: {
         question: string;
         session_id?: string;
         knowledge_base_id?: string;
+        model_config_id?: string;
         model?: string;
         top_k?: number;
       },
       onToken: (token: string) => void,
-      onDone: (result: { content: string; model: string; citations: any[] }) => void,
+      onDone: (result: { content: string; model: string; model_config_id?: string; citations: any[] }) => void,
       onError: (err: Error) => void
     ): AbortController => {
       const controller = new AbortController();
@@ -102,6 +115,7 @@ export const api = {
                   onDone({
                     content: parsed.content,
                     model: parsed.model,
+                    model_config_id: parsed.model_config_id,
                     citations: parsed.citations,
                   });
                 }
@@ -138,16 +152,25 @@ export const api = {
 
   models: {
     providers: () => request<any[]>("/api/models/providers"),
+    protocols: () => request<any[]>("/api/models/protocols"),
+    chatOptions: () => request<any[]>("/api/models/chat-options"),
     create: (data: any) =>
       request<any>("/api/models/providers", {
         method: "POST",
         body: JSON.stringify(data),
       }),
+    updateProvider: (providerId: string, data: any) =>
+      request<any>(`/api/models/providers/${providerId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    deleteProvider: (providerId: string) =>
+      request<any>(`/api/models/providers/${providerId}`, { method: "DELETE" }),
     test: (providerId: string) =>
       request<any>(`/api/models/providers/${providerId}/test`, {
         method: "POST",
       }),
-    sync: (providerId: string, data?: { protocol?: string; overwrite?: boolean }) =>
+    sync: (providerId: string, data?: { protocol?: string; protocol_type?: string; overwrite?: boolean }) =>
       request<any>(`/api/models/providers/${providerId}/sync-models`, {
         method: "POST",
         body: JSON.stringify(data ?? { protocol: "openai", overwrite: false }),

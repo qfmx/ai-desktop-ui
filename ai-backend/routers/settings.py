@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from core.config import settings
 from core.database import DB_PATH, get_db
+from services.model_provider import model_label_for_id
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -24,10 +25,32 @@ async def get_settings():
     try:
         rows = await db.execute_fetchall("SELECT key, value FROM settings")
         overrides = {row["key"]: row["value"] for row in rows}
+        default_chat_model_config_id = _setting(overrides, "default_chat_model_config_id", "gpt-4o-mini")
+        default_embedding_model_config_id = _setting(
+            overrides,
+            "default_embedding_model_config_id",
+            "openai:text-embedding-3-large",
+        )
+        default_rerank_model_config_id = _setting(
+            overrides,
+            "default_rerank_model_config_id",
+            "local:bge-reranker-v2",
+        )
+        default_chat_model_label = await model_label_for_id(db, default_chat_model_config_id)
+        default_embedding_model_label = await model_label_for_id(db, default_embedding_model_config_id)
+        default_rerank_model_label = await model_label_for_id(db, default_rerank_model_config_id)
         return {
-            "default_llm_model": _setting(overrides, "default_llm_model", settings.default_llm_model),
-            "default_temperature": float(_setting(overrides, "default_temperature", settings.default_temperature)),
-            "default_top_k": int(_setting(overrides, "default_top_k", settings.default_top_k)),
+            "default_chat_model_config_id": default_chat_model_config_id,
+            "default_embedding_model_config_id": default_embedding_model_config_id,
+            "default_rerank_model_config_id": default_rerank_model_config_id,
+            "default_chat_model_label": default_chat_model_label,
+            "default_embedding_model_label": default_embedding_model_label,
+            "default_rerank_model_label": default_rerank_model_label,
+            "default_llm_model": default_chat_model_label or default_chat_model_config_id,
+            "default_embedding_model": default_embedding_model_label or default_embedding_model_config_id,
+            "default_rerank_model": default_rerank_model_label or default_rerank_model_config_id,
+            "default_temperature": float(_setting(overrides, "default_temperature", 0.4)),
+            "default_top_k": int(_setting(overrides, "default_top_k", 8)),
             "audit_enabled": _bool(_setting(overrides, "audit_enabled", settings.audit_enabled), True),
             "masking_enabled": _bool(_setting(overrides, "masking_enabled", settings.masking_enabled), True),
             "model_fallback_enabled": _bool(_setting(overrides, "model_fallback_enabled", True), True),

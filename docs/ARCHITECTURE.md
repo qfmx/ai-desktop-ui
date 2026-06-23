@@ -15,7 +15,7 @@ FastAPI backend on 127.0.0.1:18888
   |
   +-- SQLite: data/app.db
   +-- Vector store: data/vector_store/index.json + vectors.npy
-  +-- LLM providers: OpenAI / Anthropic / Ollama-compatible runtime
+  +-- LLM providers: SQLite provider config + protocol runtime
 ```
 
 前端不直接访问数据库或模型供应商。所有业务数据都通过 `src/services/api.ts` 访问本机 FastAPI 服务。
@@ -135,6 +135,16 @@ Composer.send
   -> insert assistant message
 ```
 
+聊天模型调用链路：
+
+```text
+model_config_id
+  -> model_configs
+  -> model_providers
+  -> protocol_type + base_url + api_key + model_name
+  -> OpenAI-compatible / Anthropic / Ollama runtime call
+```
+
 知识库上传链路：
 
 ```text
@@ -150,8 +160,8 @@ POST /api/knowledge/bases/{base_id}/upload
 
 ```text
 POST /api/models/providers/{provider_id}/sync-models
-  -> fetch {endpoint}/models
-  -> parse OpenAI-compatible payload
+  -> read provider protocol_type and base_url
+  -> fetch OpenAI-compatible /models, Anthropic /models, or Ollama /api/tags
   -> insert or update model_configs
   -> set provider status connected
 ```

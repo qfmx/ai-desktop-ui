@@ -6,7 +6,25 @@ from typing import Any
 import numpy as np
 
 from core.config import settings
+from core.database import get_db
 from services.llm import llm
+from services.model_provider import resolve_model_config
+
+
+async def _runtime_settings() -> dict[str, str]:
+    db = await get_db()
+    try:
+        rows = await db.execute_fetchall("SELECT key, value FROM settings")
+        return {row["key"]: row["value"] for row in rows}
+    finally:
+        await db.close()
+
+
+def _float_setting(values: dict[str, str], key: str, default: float) -> float:
+    try:
+        return float(values.get(key, default))
+    except (TypeError, ValueError):
+        return default
 
 
 class VectorStore:
@@ -109,8 +127,11 @@ class RAGService:
         question: str,
         knowledge_base_id: str | None = None,
         top_k: int = 8,
+        model_config_id: str | None = None,
         model: str = "",
     ) -> dict[str, Any]:
+        runtime_settings = await _runtime_settings()
+        chat_model = await resolve_model_config(model_config_id or model or None, purpose="chat")
         chunks = await vector_store.search(
             question,
             top_k=top_k,
@@ -130,9 +151,9 @@ class RAGService:
             {"role": "user", "content": question},
         ]
         result = await llm.chat_completion(
-            model=model or settings.default_llm_model,
+            model_config=chat_model,
             messages=messages,
-            temperature=settings.default_temperature,
+            temperature=_float_setting(runtime_settings, "default_temperature", 0.4),
             max_tokens=4096,
         )
         citations = [
@@ -144,10 +165,11 @@ class RAGService:
             for chunk in chunks[:5]
         ]
         return {
-            "answer": result.get("choices", [{}])[0].get("message", {}).get("content", ""),
+            "answer": result.get("content", ""),
             "citations": citations,
             "chunks_retrieved": len(chunks),
-            "model": model or settings.default_llm_model,
+            "model": chat_model.display_name,
+            "model_config_id": chat_model.id,
         }
 
 

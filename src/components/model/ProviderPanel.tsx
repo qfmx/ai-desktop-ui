@@ -1,6 +1,6 @@
-import type { FormEvent } from "react";
+import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { Cloud, HardDrive, Plus } from "lucide-react";
-import type { Provider, ProviderForm } from "../../types/model";
+import type { ProtocolType, Provider, ProviderForm, ProviderType } from "../../types/model";
 
 interface ProviderPanelProps {
   providers: Provider[];
@@ -10,7 +10,7 @@ interface ProviderPanelProps {
   showProviderForm: boolean;
   setShowProviderForm: (show: boolean | ((prev: boolean) => boolean)) => void;
   providerForm: ProviderForm;
-  setProviderForm: React.Dispatch<React.SetStateAction<ProviderForm>>;
+  setProviderForm: Dispatch<SetStateAction<ProviderForm>>;
   creatingProvider: boolean;
   handleCreateProvider: (event: FormEvent) => Promise<void>;
 }
@@ -21,6 +21,24 @@ function statusLabel(status: string) {
   if (status === "offline") return "离线";
   return status || "未知";
 }
+
+const protocolDefaults: Record<ProtocolType, string> = {
+  "openai-compatible": "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com/v1",
+  ollama: "http://localhost:11434",
+};
+
+const protocolLabels: Record<ProtocolType, string> = {
+  "openai-compatible": "OpenAI Compatible",
+  anthropic: "Anthropic",
+  ollama: "Ollama",
+};
+
+const providerTypeLabels: Record<ProviderType, string> = {
+  cloud: "云端",
+  local: "本地",
+  custom: "自定义",
+};
 
 export function ProviderPanel({
   providers,
@@ -55,8 +73,49 @@ export function ProviderPanel({
         <form className="config-panel" onSubmit={handleCreateProvider} style={{ marginBottom: 16 }}>
           <header>
             <Cloud size={18} />
-            <strong>新增 OpenAI-compatible 供应商</strong>
+            <strong>新增模型供应商</strong>
           </header>
+          <label className="range-control">
+            <span>协议类型</span>
+            <select
+              onChange={(event) => {
+                const protocol = event.target.value as ProtocolType;
+                setProviderForm((prev) => ({
+                  ...prev,
+                  protocol_type: protocol,
+                  base_url:
+                    !prev.base_url || Object.values(protocolDefaults).includes(prev.base_url)
+                      ? protocolDefaults[protocol]
+                      : prev.base_url,
+                }));
+              }}
+              value={providerForm.protocol_type}
+            >
+              {Object.entries(protocolLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="range-control">
+            <span>供应商类型</span>
+            <select
+              onChange={(event) =>
+                setProviderForm((prev) => ({
+                  ...prev,
+                  provider_type: event.target.value as ProviderType,
+                }))
+              }
+              value={providerForm.provider_type}
+            >
+              {Object.entries(providerTypeLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="range-control">
             <span>供应商名称</span>
             <input
@@ -81,15 +140,15 @@ export function ProviderPanel({
             />
           </label>
           <label className="range-control">
-            <span>Endpoint</span>
+            <span>Base URL</span>
             <input
               onChange={(event) =>
-                setProviderForm((prev) => ({ ...prev, endpoint: event.target.value }))
+                setProviderForm((prev) => ({ ...prev, base_url: event.target.value }))
               }
-              placeholder="https://api.openai.com/v1"
+              placeholder={protocolDefaults[providerForm.protocol_type]}
               required
               type="url"
-              value={providerForm.endpoint}
+              value={providerForm.base_url}
             />
           </label>
           <label className="range-control">
@@ -105,24 +164,8 @@ export function ProviderPanel({
           </label>
           <label className="toggle-row">
             <span>
-              <strong>本地供应商</strong>
-              <small>关闭时按云端供应商展示</small>
-            </span>
-            <input
-              checked={providerForm.type === "local"}
-              onChange={() =>
-                setProviderForm((prev) => ({
-                  ...prev,
-                  type: prev.type === "local" ? "cloud" : "local",
-                }))
-              }
-              type="checkbox"
-            />
-          </label>
-          <label className="toggle-row">
-            <span>
               <strong>创建后自动同步模型</strong>
-              <small>调用 OpenAI-compatible /models 接口填充模型</small>
+              <small>按协议调用模型列表接口填充模型</small>
             </span>
             <input
               checked={providerForm.auto_sync_models}
@@ -152,11 +195,14 @@ export function ProviderPanel({
             type="button"
           >
             <div className="provider-icon">
-              {provider.type === "cloud" ? <Cloud size={19} /> : <HardDrive size={19} />}
+              {provider.providerType === "local" ? <HardDrive size={19} /> : <Cloud size={19} />}
             </div>
             <span>
               <strong>{provider.name}</strong>
-              <small>{provider.endpoint}</small>
+              <small>
+                {protocolLabels[provider.protocolType]} · {provider.baseUrl}
+              </small>
+              <small>{providerTypeLabels[provider.providerType]}</small>
             </span>
             <em className={`provider-status ${provider.status}`}>{statusLabel(provider.status)}</em>
           </button>

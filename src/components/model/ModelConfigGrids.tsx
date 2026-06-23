@@ -2,6 +2,12 @@ import { CheckCircle2, KeyRound, Save, ShieldCheck, SlidersHorizontal, Zap } fro
 import type { ModelConfig, Provider } from "../../types/model";
 
 interface ModelConfigGridsProps {
+  defaultChatModelId: string;
+  setDefaultChatModelId: (v: string) => void;
+  defaultEmbeddingModelId: string;
+  setDefaultEmbeddingModelId: (v: string) => void;
+  defaultRerankModelId: string;
+  setDefaultRerankModelId: (v: string) => void;
   temperature: number;
   setTemperature: (v: number) => void;
   topK: number;
@@ -19,7 +25,22 @@ interface ModelConfigGridsProps {
   onSaveSettings: () => void;
 }
 
+function hasCapability(model: ModelConfig, name: string) {
+  return model.capabilities.some((cap) => cap.toLowerCase() === name.toLowerCase() || cap === name);
+}
+
+function modelLabel(model?: ModelConfig) {
+  if (!model) return "—";
+  return `${model.provider} / ${model.name}`;
+}
+
 export function ModelConfigGrids({
+  defaultChatModelId,
+  setDefaultChatModelId,
+  defaultEmbeddingModelId,
+  setDefaultEmbeddingModelId,
+  defaultRerankModelId,
+  setDefaultRerankModelId,
   temperature,
   setTemperature,
   topK,
@@ -36,6 +57,15 @@ export function ModelConfigGrids({
   savingSettings,
   onSaveSettings,
 }: ModelConfigGridsProps) {
+  const chatModels = allModels.filter(
+    (model) => model.active && !hasCapability(model, "嵌入") && !hasCapability(model, "重排")
+  );
+  const embeddingModels = allModels.filter((model) => hasCapability(model, "嵌入"));
+  const rerankModels = allModels.filter((model) => hasCapability(model, "重排"));
+  const selectedChatModel = allModels.find((model) => model.id === defaultChatModelId);
+  const selectedEmbeddingModel = allModels.find((model) => model.id === defaultEmbeddingModelId);
+  const selectedRerankModel = allModels.find((model) => model.id === defaultRerankModelId);
+
   return (
     <div className="config-grid">
       <section className="config-panel">
@@ -43,6 +73,45 @@ export function ModelConfigGrids({
           <SlidersHorizontal size={18} />
           <strong>默认参数</strong>
         </header>
+        <label className="range-control">
+          <span>默认聊天模型</span>
+          <select
+            onChange={(event) => setDefaultChatModelId(event.target.value)}
+            value={defaultChatModelId}
+          >
+            {chatModels.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.provider} / {model.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="range-control">
+          <span>默认 Embedding 模型</span>
+          <select
+            onChange={(event) => setDefaultEmbeddingModelId(event.target.value)}
+            value={defaultEmbeddingModelId}
+          >
+            {embeddingModels.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.provider} / {model.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="range-control">
+          <span>默认 Rerank 模型</span>
+          <select
+            onChange={(event) => setDefaultRerankModelId(event.target.value)}
+            value={defaultRerankModelId}
+          >
+            {rerankModels.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.provider} / {model.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <label className="range-control">
           <span>
             温度 <strong>{temperature.toFixed(1)}</strong>
@@ -118,8 +187,12 @@ export function ModelConfigGrids({
           <strong>访问凭据</strong>
         </header>
         <div className="endpoint-row">
-          <span>Endpoint</span>
-          <strong>{currentProvider?.endpoint || "—"}</strong>
+          <span>协议</span>
+          <strong>{currentProvider?.protocolType || "—"}</strong>
+        </div>
+        <div className="endpoint-row">
+          <span>Base URL</span>
+          <strong>{currentProvider?.baseUrl || "—"}</strong>
         </div>
         <div className="endpoint-row">
           <span>API Key</span>
@@ -148,22 +221,17 @@ export function ModelConfigGrids({
         </header>
         <ol>
           <li>
-            企业知识问答:{" "}
-            {currentProvider?.models?.find((model) => model.active)?.name || "—"}
+            企业知识问答: {modelLabel(selectedChatModel)}
           </li>
           <li>
-            长文档分析:{" "}
-            {allModels.find((model) => model.name.toLowerCase().includes("claude"))
-              ?.name || "—"}
+            向量检索: {modelLabel(selectedEmbeddingModel)}
           </li>
           <li>
-            低延迟摘要:{" "}
-            {allModels.find((model) => model.name.toLowerCase().includes("mini"))
-              ?.name || "—"}
+            检索重排: {modelLabel(selectedRerankModel)}
           </li>
           <li>
             离线场景:{" "}
-            {providers.find((provider) => provider.type === "local")?.models?.[0]
+            {providers.find((provider) => provider.providerType === "local")?.models?.[0]
               ?.name || "—"}
           </li>
         </ol>

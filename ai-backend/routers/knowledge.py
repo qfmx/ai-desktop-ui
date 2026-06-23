@@ -2,7 +2,6 @@ import json
 
 from fastapi import APIRouter, HTTPException
 
-from core.config import settings
 from core.database import get_db
 from services.document import doc_service
 from services.rag import vector_store
@@ -39,6 +38,13 @@ def _health_for_status(status: str, chunks: int) -> int:
     return 70
 
 
+async def _default_embedding_model_config_id(db) -> str:
+    rows = await db.execute_fetchall(
+        "SELECT value FROM settings WHERE key = 'default_embedding_model_config_id'"
+    )
+    return rows[0]["value"] if rows else "openai:text-embedding-3-large"
+
+
 @router.get("/bases")
 async def list_bases():
     vector_stats = vector_store.stats()
@@ -65,6 +71,7 @@ async def list_bases():
 async def create_base(data: dict):
     db = await get_db()
     try:
+        default_embedding = await _default_embedding_model_config_id(db)
         await db.execute(
             """
             INSERT INTO knowledge_bases
@@ -75,7 +82,7 @@ async def create_base(data: dict):
                 data.get("id", ""),
                 data.get("name", ""),
                 data.get("description", ""),
-                data.get("embedding_model", settings.default_embedding_model),
+                data.get("embedding_model", default_embedding),
                 data.get("owner", ""),
                 json.dumps(data.get("tags", []), ensure_ascii=False),
             ),

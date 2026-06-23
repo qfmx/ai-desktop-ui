@@ -20,19 +20,10 @@ AI_
 | `AI_DATA_DIR` | `data` | 后端数据目录 |
 | `AI_VECTOR_STORE_DIR` | `data/vector_store` | 向量索引目录 |
 | `AI_KNOWLEDGE_DIR` | `data/knowledge` | 知识库文件目录预留 |
-| `AI_OPENAI_API_KEY` | 空 | OpenAI API key |
-| `AI_OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI 兼容地址 |
-| `AI_ANTHROPIC_API_KEY` | 空 | Anthropic API key |
-| `AI_OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama 地址 |
-| `AI_DEFAULT_EMBEDDING_MODEL` | `text-embedding-3-large` | 默认 embedding 模型 |
-| `AI_DEFAULT_RERANK_MODEL` | `bge-reranker-v2` | 默认重排模型标识 |
-| `AI_DEFAULT_LLM_MODEL` | `gpt-4o-mini` | 默认聊天模型 |
-| `AI_DEFAULT_TEMPERATURE` | `0.4` | 默认 temperature |
-| `AI_DEFAULT_TOP_K` | `8` | 默认检索条数 |
 | `AI_AUDIT_ENABLED` | `true` | 审计默认开关 |
 | `AI_MASKING_ENABLED` | `true` | 脱敏默认开关 |
 
-本地可在 `ai-backend/.env` 放置配置。该文件已被 `.gitignore` 忽略。
+模型供应商、API key、Base URL、默认聊天模型、默认 embedding 模型、默认 rerank 模型、temperature 和 top-k 均保存在 SQLite 中，不再作为系统环境变量维护。本地 `.env` 仍可放置运行参数；旧模型相关 `AI_` 变量会被忽略以保证兼容。
 
 ## 2. SQLite 数据库
 
@@ -66,8 +57,11 @@ ai-backend/core/database.py:init_db()
 - `id`: 主键
 - `title`: 会话标题
 - `model`: 会话模型
+- `model_config_id`: 当前会话绑定的模型配置 ID
 - `scope`: 知识范围
 - `starred`: 收藏状态
+- `archived`: 归档状态，`1` 表示已归档
+- `archived_at`: 归档时间，取消归档时为空字符串
 - `tags`: JSON 字符串
 - `preview`: 预览文本
 - `message_count`: 消息数量
@@ -86,6 +80,7 @@ ai-backend/core/database.py:init_db()
 - `role`: `user` 或 `assistant`
 - `content`
 - `model`
+- `model_config_id`
 - `tokens`
 - `citations`: JSON 字符串
 - `created_at`
@@ -115,13 +110,16 @@ ai-backend/core/database.py:init_db()
 
 - `id`
 - `name`
-- `type`: `cloud` 或 `local`
-- `endpoint`
+- `provider_type`: `cloud`、`local` 或 `custom`
+- `protocol_type`: `openai-compatible`、`anthropic` 或 `ollama`
+- `base_url`
 - `api_key`
 - `status`: `connected`、`limited`、`offline` 等
+- `enabled`
 - `created_at`
+- `updated_at`
 
-注意：API 返回前会脱敏 `api_key`，但数据库中当前为明文保存。
+注意：API 返回前会脱敏 `api_key`，但数据库中当前为明文保存。旧库迁移后可能仍存在 `type` 和 `endpoint` 兼容列，业务 API 以 `provider_type` 和 `base_url` 为准。
 
 ### `model_configs`
 
@@ -131,12 +129,16 @@ ai-backend/core/database.py:init_db()
 
 - `id`
 - `provider_id`
+- `model_name`: 实际发送给供应商的模型名
+- `display_name`: UI 展示名
 - `name`
 - `context_length`
 - `max_output`
 - `temperature`
 - `active`
 - `capabilities`: JSON 字符串
+- `created_at`
+- `updated_at`
 
 ### `settings`
 
@@ -148,6 +150,14 @@ ai-backend/core/database.py:init_db()
 - `value`
 
 后端保存时统一写入字符串，读取时按具体 key 转换成 bool、int、float 或 string。
+
+模型默认值相关 key：
+
+- `default_chat_model_config_id`
+- `default_embedding_model_config_id`
+- `default_rerank_model_config_id`
+- `default_temperature`
+- `default_top_k`
 
 ### `quick_actions`
 
@@ -243,8 +253,10 @@ ai-backend/core/database.py:init_db()
 
 - `gpt-41`
 - `gpt-4o-mini`
+- `openai:text-embedding-3-large`
 - `claude-sonnet`
 - `qwen-local`
+- `local:bge-reranker-v2`
 
 默认知识库：
 
@@ -304,3 +316,14 @@ chunk 字段：
 开发模式默认数据相对 `ai-backend` 工作目录。
 
 打包模式由 Tauri 将后端工作目录切到 app data 目录。因此安装版和 portable 版不会把运行数据写到安装目录旁边。
+
+## 7. 会话归档字段
+
+`conversations` 增加以下生命周期字段：
+- `archived`: `INTEGER NOT NULL DEFAULT 0`，`1` 表示已归档。
+- `archived_at`: `TEXT NOT NULL DEFAULT ''`，记录归档时间，取消归档时清空。
+
+数据规则：
+- 聊天页默认只查询 `archived = 0` 的会话。
+- 历史页使用 `include_archived=true` 查询未删除的全部会话，并在前端按归档状态筛选。
+- 删除会话执行物理删除，`messages.conversation_id` 通过外键级联删除关联消息。

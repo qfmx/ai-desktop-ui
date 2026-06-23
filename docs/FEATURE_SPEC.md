@@ -39,23 +39,26 @@
 - 加载会话列表、快捷问题和默认问答设置。
 - 支持创建新会话。
 - 支持选择会话并加载消息。
+- 支持在会话列表通过 `...` 菜单重命名、编辑标签、归档和删除会话。
+- 已归档会话不会出现在聊天页左侧会话列表中。
+- 支持在聊天输入区选择具体供应商下的模型。
 - 发送问题时调用 `/api/chat/ask/stream`，以 SSE 形式接收 token。
 - 生成完成后将 assistant 消息、模型名和引用写回前端状态。
 - 后端会把 user/assistant 消息持久化到 SQLite。
-- 右侧上下文面板展示运行时 pipeline、模型路由、审计状态和向量索引统计。
+- 聊天主界面只展示会话列表、消息区和输入区，不展示运行时 pipeline、模型路由、审计链路等调试面板。
 
 后端行为：
 
 - 普通问答：`POST /api/chat/ask`
 - 流式问答：`POST /api/chat/ask/stream`
 - 检索：`VectorStore.search()` 查询向量索引。
-- 生成：`LLMService` 按模型名路由到 OpenAI、Anthropic 或 Ollama。
+- 生成：`LLMService` 按 `model_config_id` 解析数据库中的协议和供应商配置后调用模型。
 - 引用：返回前 5 个检索片段作为 citations。
 
 当前边界：
 
 - 如果向量库为空，检索上下文为空，回答依赖模型自身能力。
-- OpenAI embedding 和 chat 调用依赖 `AI_OPENAI_API_KEY` 等环境变量。
+- 模型供应商、API key、Base URL 和默认模型配置来自 SQLite。用户应在模型配置页维护供应商，而不是通过系统环境变量配置模型。
 - 会话消息 ID 使用时间字符串拼接，极端并发下需注意唯一性。
 - Chat 工具栏中的“企业库/网页/混合”模式按钮是前端展示，未接入检索策略参数。
 
@@ -108,23 +111,28 @@
 功能契约：
 
 - 展示供应商数量、启用模型数量、模型总量和供应商可用性。
-- 支持新增模型供应商。
+- 支持选择协议类型：`openai-compatible`、`anthropic`、`ollama`。
+- 支持选择供应商类型：云端、本地、自定义。
+- 支持新增模型供应商，填写自定义名称、Base URL 和 API Key。
 - 支持测试供应商连接。
-- 支持从 OpenAI 兼容 `/models` 接口同步模型列表。
+- 支持按协议同步模型列表。
 - 支持启用/停用单个模型配置。
-- 支持保存默认 temperature、top_k、脱敏、fallback、trace 等设置。
+- 支持保存默认聊天模型、默认 embedding 模型、默认 rerank 模型、temperature、top_k、脱敏、fallback、trace 等设置。
 
 供应商行为：
 
 - provider ID 会被规范化为小写 slug。
 - API key 只在数据库保存明文，返回前会用 `mask_api_key()` 脱敏。
-- 同步模型时生成模型 ID：`{provider_id}:{remote_model_id}`。
-- 当前同步协议只支持 OpenAI 兼容模型列表。
+- 同步模型时生成模型配置 ID：`{provider_id}:{remote_model_id}`。
+- 聊天调用通过 `model_config_id` 解析供应商、协议、Base URL、API key 和真实模型名。
+- OpenAI-compatible 使用 `/models`、`/chat/completions` 和 `/embeddings`。
+- Ollama 使用 `/api/tags`、`/api/chat` 和 `/api/embeddings`。
+- Anthropic 使用 `/models` 和 `/messages`；流式问答当前以非流式调用结果一次性返回。
 
 当前边界：
 
-- provider 配置会影响 UI 列表，但 `LLMService` 实际运行时主要从环境变量读取 OpenAI/Anthropic/Ollama 地址和 key。
 - 模型能力由模型名简单推断，例如 embedding、vision、code。
+- Anthropic embedding 未接入，默认 embedding 应选择支持 embedding 的 OpenAI-compatible 或 Ollama 模型配置。
 
 ## 5. 对话历史
 
@@ -141,7 +149,9 @@
 - 加载全部会话并展示标题、模型、知识范围、消息数量、token 使用量、标签、预览和最后活动时间。
 - 支持按关键字过滤。
 - 支持按标签过滤。
+- 支持按全部、未归档、已归档过滤。
 - 支持收藏/取消收藏会话。
+- 支持归档/取消归档会话。
 - 支持删除会话，删除时级联删除消息。
 
 当前边界：

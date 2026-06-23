@@ -4,18 +4,19 @@ import type { HistoryItem } from "../../types/history";
 interface HistoryListProps {
   items: HistoryItem[];
   toggleStar: (id: string) => void;
+  toggleArchive: (id: string) => void;
   deleteItem: (id: string) => void;
 }
 
-export function HistoryList({ items, toggleStar, deleteItem }: HistoryListProps) {
+export function HistoryList({ items, toggleStar, toggleArchive, deleteItem }: HistoryListProps) {
   return (
     <section className="history-list">
       {items.map((item) => (
-        <article className="history-row" key={item.id}>
+        <article className={`history-row ${item.archived ? "archived" : ""}`} key={item.id}>
           <button
             className={`star-button ${item.starred ? "active" : ""}`}
             onClick={() => toggleStar(item.id)}
-            title="收藏"
+            title={item.starred ? "取消收藏" : "收藏"}
             type="button"
           >
             <Star size={16} fill={item.starred ? "currentColor" : "none"} />
@@ -24,7 +25,10 @@ export function HistoryList({ items, toggleStar, deleteItem }: HistoryListProps)
             <MessageSquare size={19} />
           </div>
           <div className="history-content">
-            <h2>{item.title}</h2>
+            <div className="history-title-row">
+              <h2>{item.title}</h2>
+              {item.archived && <span className="history-status-badge">已归档</span>}
+            </div>
             <p>{item.preview}</p>
             <div className="history-meta">
               <span>{item.model}</span>
@@ -43,10 +47,23 @@ export function HistoryList({ items, toggleStar, deleteItem }: HistoryListProps)
             ))}
           </div>
           <div className="history-actions">
-            <button title="归档" type="button">
+            <button
+              className={item.archived ? "active" : ""}
+              onClick={() => toggleArchive(item.id)}
+              title={item.archived ? "取消归档" : "归档"}
+              type="button"
+            >
               <Archive size={15} />
             </button>
-            <button title="删除" type="button" onClick={() => deleteItem(item.id)}>
+            <button
+              title="删除"
+              type="button"
+              onClick={() => {
+                if (window.confirm(`删除历史会话「${item.title}」？`)) {
+                  deleteItem(item.id);
+                }
+              }}
+            >
               <Trash2 size={15} />
             </button>
           </div>

@@ -13,6 +13,8 @@
 - 后端：Python FastAPI、SQLite、NumPy 向量索引
 - 包管理：前端 `pnpm`，后端 `uv`
 
+模型供应商配置存储在 SQLite 中。不要新增或恢复模型供应商、API key、Base URL 或默认模型相关的环境变量；用户通过“模型配置”页面维护协议类型、供应商类型、Base URL、API Key 和默认模型。
+
 后端固定监听：
 
 ```text
@@ -37,6 +39,8 @@ http://localhost:1420
 6. `docs/DATA_SPEC.md`
 7. `docs/DEVELOPMENT.md`
 8. `docs/PACKAGING.md`
+
+会话生命周期规则：聊天页左侧列表默认只显示未归档会话；归档只更新 `conversations.archived/archived_at`，历史页仍可查看和取消归档；删除会物理删除会话并级联删除消息，历史页不再显示。
 
 如果要改功能，先更新对应 spec，再改代码。文档必须描述当前真实行为，不能把 UI 占位写成已完整实现。
 
@@ -129,7 +133,7 @@ pnpm package:windows
 - `ai-backend/routers/settings.py`: 设置 API。
 - `ai-backend/services/rag.py`: 向量库和 RAG。
 - `ai-backend/services/llm.py`: LLM/embedding provider 调用。
-- `ai-backend/services/model_provider.py`: OpenAI 兼容 provider 同步。
+- `ai-backend/services/model_provider.py`: 协议驱动的 provider 同步、测试和 `model_config_id` 解析。
 - `ai-backend/services/document.py`: 文档解析和切片。
 
 Tauri：
@@ -168,11 +172,14 @@ Tauri：
 - 设置页导入/导出按钮没有后端动作。
 - 权限矩阵只展示，不在 RAG 检索中强制过滤。
 - `system_prompt` 可保存，但当前问答服务仍使用后端代码中的固定系统提示词。
+- Anthropic embedding 未接入；默认 embedding 模型应选择 OpenAI-compatible 或 Ollama 协议下支持 embedding 的模型配置。
 
 ## 变更原则
 
 - 前端新增 API 时先改 `src/services/api.ts`。
 - 后端新增业务能力时优先放到 `services/`，router 只做请求响应编排。
 - 新增数据库字段时同步更新 `core/database.py`、相关 API、前端类型和 `docs/DATA_SPEC.md`。
+- 改会话生命周期时同步更新 `src/components/chat/SessionList.tsx`、`src/pages/ChatPage.tsx`、`src/pages/HistoryPage.tsx`、`ai-backend/routers/chat.py` 和会话相关 docs。
+- 模型调用必须通过 `model_config_id` 解析 provider，不要在 LLM 服务中硬编码供应商环境变量。
 - 新增页面或导航时同步更新 `Sidebar.tsx`、`App.tsx` 和 `docs/FEATURE_SPEC.md`。
 - 涉及打包行为时同步更新 `docs/PACKAGING.md`。

@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
 
-import type { Provider, ProviderForm } from "../types/model";
+import type { ProtocolType, Provider, ProviderForm, ProviderType } from "../types/model";
 import { initialProviderForm } from "../types/model";
 
 import { ModelSummary } from "../components/model/ModelSummary";
@@ -23,17 +23,26 @@ function parseCapabilities(value: unknown): string[] {
 }
 
 function mapProvider(p: any): Provider {
+  const providerType = (p.provider_type || p.type || "cloud") as ProviderType;
+  const protocolType = (p.protocol_type || "openai-compatible") as ProtocolType;
+  const baseUrl = p.base_url || p.endpoint || "";
   return {
     id: p.id,
     name: p.name,
-    type: p.type || "cloud",
+    type: providerType,
+    providerType,
+    protocolType,
     status: p.status || "connected",
-    endpoint: p.endpoint || "",
+    endpoint: baseUrl,
+    baseUrl,
     hasApiKey: Boolean(p.has_api_key),
     apiKeyMasked: p.api_key_masked || "",
     models: (p.models || []).map((m: any) => ({
       id: m.id,
-      name: m.name,
+      name: m.display_name || m.name || m.model_name || m.id,
+      displayName: m.display_name || m.name || m.model_name || m.id,
+      modelName: m.model_name || m.name || m.id,
+      providerId: p.id,
       provider: p.name,
       context: m.context_length || "未知",
       maxOutput: m.max_output || 4096,
@@ -47,6 +56,9 @@ function mapProvider(p: any): Provider {
 export default function ModelPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [selectedProvider, setSelectedProvider] = useState("");
+  const [defaultChatModelId, setDefaultChatModelId] = useState("");
+  const [defaultEmbeddingModelId, setDefaultEmbeddingModelId] = useState("");
+  const [defaultRerankModelId, setDefaultRerankModelId] = useState("");
   const [temperature, setTemperature] = useState(0.4);
   const [topK, setTopK] = useState(8);
   const [safetyFilter, setSafetyFilter] = useState(true);
@@ -96,6 +108,9 @@ export default function ModelPage() {
     void Promise.all([
       loadProviders(),
       api.settings.get().then((settings) => {
+        setDefaultChatModelId(settings.default_chat_model_config_id ?? "");
+        setDefaultEmbeddingModelId(settings.default_embedding_model_config_id ?? "");
+        setDefaultRerankModelId(settings.default_rerank_model_config_id ?? "");
         setTemperature(settings.default_temperature ?? 0.4);
         setTopK(settings.default_top_k ?? 8);
         setSafetyFilter(settings.masking_enabled ?? true);
@@ -167,11 +182,15 @@ export default function ModelPage() {
 
   const syncModels = async (providerId?: string) => {
     if (!providerId) return;
+    const provider = providers.find((item) => item.id === providerId);
     setSyncingProviderId(providerId);
     setError("");
     setNotice("");
     try {
-      const result = await api.models.sync(providerId, { protocol: "openai", overwrite: false });
+      const result = await api.models.sync(providerId, {
+        protocol_type: provider?.protocolType,
+        overwrite: false,
+      });
       await loadProviders(providerId);
       setNotice(`同步完成：获取 ${result.fetched ?? 0} 个，新增 ${result.inserted ?? 0} 个，更新 ${result.updated ?? 0} 个`);
     } catch (err) {
@@ -188,8 +207,13 @@ export default function ModelPage() {
     setNotice("");
     try {
       const result = await api.models.create({
-        ...providerForm,
-        protocol: "openai",
+        id: providerForm.id,
+        name: providerForm.name,
+        provider_type: providerForm.provider_type,
+        protocol_type: providerForm.protocol_type,
+        base_url: providerForm.base_url,
+        api_key: providerForm.api_key,
+        auto_sync_models: providerForm.auto_sync_models,
       });
       const providerId = result.provider?.id || providerForm.id;
       setProviderForm(initialProviderForm);
@@ -215,6 +239,9 @@ export default function ModelPage() {
     setNotice("");
     try {
       await api.settings.save({
+        default_chat_model_config_id: defaultChatModelId,
+        default_embedding_model_config_id: defaultEmbeddingModelId,
+        default_rerank_model_config_id: defaultRerankModelId,
         default_temperature: temperature,
         default_top_k: topK,
         masking_enabled: safetyFilter,
@@ -277,6 +304,12 @@ export default function ModelPage() {
           />
 
           <ModelConfigGrids
+            defaultChatModelId={defaultChatModelId}
+            setDefaultChatModelId={setDefaultChatModelId}
+            defaultEmbeddingModelId={defaultEmbeddingModelId}
+            setDefaultEmbeddingModelId={setDefaultEmbeddingModelId}
+            defaultRerankModelId={defaultRerankModelId}
+            setDefaultRerankModelId={setDefaultRerankModelId}
             temperature={temperature}
             setTemperature={setTemperature}
             topK={topK}

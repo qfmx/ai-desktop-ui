@@ -5,6 +5,7 @@ export type Message = {
   content: string;
   time: string;
   model?: string;
+  modelConfigId?: string;
   tokens?: number;
   citations?: string[];
 };
@@ -14,8 +15,11 @@ export type ChatSession = {
   title: string;
   scope: string;
   model: string;
+  modelConfigId: string;
   messages: Message[];
   tags?: string[];
+  archived?: boolean;
+  archivedAt?: string;
 };
 
 export type QuickAction = {

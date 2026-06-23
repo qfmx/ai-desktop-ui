@@ -7,6 +7,8 @@ export type HistoryItem = {
   tokenUsage: number;
   lastActive: string;
   starred: boolean;
+  archived: boolean;
+  archivedAt: string;
   tags: string[];
   preview: string;
 };
