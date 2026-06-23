@@ -6,8 +6,6 @@ import { HistoryToolbar } from "../components/history/HistoryToolbar";
 import { HistoryFilter, type ArchiveFilter } from "../components/history/HistoryFilter";
 import { HistoryList } from "../components/history/HistoryList";
 
-const ALL_TAG = "全部";
-
 function parseTags(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String);
   if (typeof value !== "string" || !value) return [];
@@ -19,10 +17,14 @@ function parseTags(value: unknown): string[] {
   }
 }
 
-export default function HistoryPage() {
+interface HistoryPageProps {
+  onOpenSession: (id: string) => void;
+}
+
+export default function HistoryPage({ onOpenSession }: HistoryPageProps) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [query, setQuery] = useState("");
-  const [activeTag, setActiveTag] = useState(ALL_TAG);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("all");
   const [backendOk, setBackendOk] = useState(false);
 
@@ -59,25 +61,40 @@ export default function HistoryPage() {
   }, [loadSessions]);
 
   const tags = useMemo(
-    () => [ALL_TAG, ...Array.from(new Set(items.flatMap((item) => item.tags)))],
+    () => Array.from(new Set(items.flatMap((item) => item.tags))),
     [items],
   );
+
+  useEffect(() => {
+    setSelectedTags((current) => current.filter((tag) => tags.includes(tag)));
+  }, [tags]);
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       const matchedArchive =
         archiveFilter === "all" ||
         (archiveFilter === "archived" ? item.archived : !item.archived);
-      const matchedTag = activeTag === ALL_TAG || item.tags.includes(activeTag);
+      const matchedTags =
+        selectedTags.length === 0 || selectedTags.some((tag) => item.tags.includes(tag));
       const matchedQuery =
         !query ||
         [item.title, item.preview, item.model, item.scope, ...item.tags]
           .join(" ")
           .toLowerCase()
           .includes(query.toLowerCase());
-      return matchedArchive && matchedTag && matchedQuery;
+      return matchedArchive && matchedTags && matchedQuery;
     });
-  }, [activeTag, archiveFilter, items, query]);
+  }, [archiveFilter, items, query, selectedTags]);
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((current) =>
+      current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag],
+    );
+  };
+
+  const clearTags = () => {
+    setSelectedTags([]);
+  };
 
   const toggleStar = async (id: string) => {
     const current = items.find((item) => item.id === id);
@@ -123,6 +140,38 @@ export default function HistoryPage() {
     }
   };
 
+  const renameItem = async (id: string, title: string) => {
+    const current = items.find((item) => item.id === id);
+    if (!current) return;
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, title } : item)),
+    );
+    try {
+      await api.chat.update(id, { title });
+    } catch (error) {
+      setItems((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, title: current.title } : item)),
+      );
+      throw error;
+    }
+  };
+
+  const updateItemTags = async (id: string, tags: string[]) => {
+    const current = items.find((item) => item.id === id);
+    if (!current) return;
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, tags } : item)),
+    );
+    try {
+      await api.chat.update(id, { tags });
+    } catch (error) {
+      setItems((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, tags: current.tags } : item)),
+      );
+      throw error;
+    }
+  };
+
   const deleteItem = async (id: string) => {
     await api.chat.delete(id);
     setItems((prev) => prev.filter((item) => item.id !== id));
@@ -144,16 +193,20 @@ export default function HistoryPage() {
       <HistoryToolbar query={query} onQueryChange={setQuery} />
       <HistoryFilter
         tags={tags}
-        activeTag={activeTag}
+        selectedTags={selectedTags}
         archiveFilter={archiveFilter}
-        onTagChange={setActiveTag}
+        onTagToggle={toggleTag}
+        onClearTags={clearTags}
         onArchiveFilterChange={setArchiveFilter}
       />
       <HistoryList
         items={filteredItems}
         toggleStar={toggleStar}
         toggleArchive={toggleArchive}
+        renameItem={renameItem}
+        updateItemTags={updateItemTags}
         deleteItem={deleteItem}
+        onOpenSession={onOpenSession}
       />
     </div>
   );

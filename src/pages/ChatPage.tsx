@@ -79,7 +79,11 @@ function shouldUseQuestionAsTitle(title: string) {
   return !title || title === "新会话" || title === "新回话";
 }
 
-export default function ChatPage() {
+interface ChatPageProps {
+  initialSessionId?: string;
+}
+
+export default function ChatPage({ initialSessionId = "" }: ChatPageProps) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeId, setActiveId] = useState("");
   const [input, setInput] = useState("");
@@ -105,8 +109,8 @@ export default function ChatPage() {
     const list = await api.chat.sessions();
     const mapped = list.map(mapSession);
     setSessions(mapped);
-    setActiveId((current) => current || mapped[0]?.id || "");
-  }, []);
+    setActiveId((current) => current || initialSessionId || mapped[0]?.id || "");
+  }, [initialSessionId]);
 
   useEffect(() => {
     if (!backendOk) return;
@@ -129,7 +133,7 @@ export default function ChatPage() {
   }, [backendOk, loadSessions]);
 
   const activeSession = useMemo(
-    () => sessions.find((session) => session.id === activeId) ?? sessions[0],
+    () => sessions.find((session) => session.id === activeId) ?? (!activeId ? sessions[0] : undefined),
     [activeId, sessions],
   );
   const selectedChatModel = useMemo(
@@ -146,18 +150,34 @@ export default function ChatPage() {
     if (!activeId || !backendOk) return;
     api.chat.session(activeId).then((session) => {
       setSelectedModelConfigId((current) => session.model_config_id || current || firstChatModelId);
-      setSessions((prev) =>
-        prev.map((item) =>
+      setSessions((prev) => {
+        const messages = (session.messages ?? []).map(mapMessage);
+        const existing = prev.find((item) => item.id === activeId);
+        if (!existing) {
+          return [
+            {
+              ...mapSession(session),
+              messages,
+            },
+            ...prev,
+          ];
+        }
+        return prev.map((item) =>
           item.id === activeId
             ? {
                 ...item,
+                title: session.title || item.title,
+                scope: session.scope || item.scope,
                 model: session.model || item.model,
                 modelConfigId: session.model_config_id || item.modelConfigId,
-                messages: (session.messages ?? []).map(mapMessage),
+                tags: parseJsonList(session.tags),
+                archived: Boolean(session.archived),
+                archivedAt: session.archived_at || "",
+                messages,
               }
             : item,
-        ),
-      );
+        );
+      });
     });
   }, [activeId, backendOk, firstChatModelId]);
 
@@ -275,36 +295,6 @@ export default function ChatPage() {
     [sessions],
   );
 
-  const handleRenameSession = useCallback(
-    async (id: string, title: string) => {
-      setSessions((prev) =>
-        prev.map((session) => (session.id === id ? { ...session, title } : session)),
-      );
-      try {
-        await api.chat.update(id, { title });
-      } catch (error) {
-        await loadSessions();
-        throw error;
-      }
-    },
-    [loadSessions],
-  );
-
-  const handleUpdateSessionTags = useCallback(
-    async (id: string, tags: string[]) => {
-      setSessions((prev) =>
-        prev.map((session) => (session.id === id ? { ...session, tags } : session)),
-      );
-      try {
-        await api.chat.update(id, { tags });
-      } catch (error) {
-        await loadSessions();
-        throw error;
-      }
-    },
-    [loadSessions],
-  );
-
   const handleArchiveSession = useCallback(
     (id: string) => {
       removeSessionLocally(id);
@@ -386,8 +376,6 @@ export default function ChatPage() {
         activeId={activeId}
         onSelect={setActiveId}
         onNewSession={handleNewSession}
-        onRename={handleRenameSession}
-        onUpdateTags={handleUpdateSessionTags}
         onArchive={handleArchiveSession}
         onDelete={handleDeleteSession}
       />

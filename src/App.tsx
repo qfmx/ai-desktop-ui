@@ -34,6 +34,7 @@ const pageTitles: Record<PageKey, { title: string; subtitle: string }> = {
 
 function App() {
   const [activePage, setActivePage] = useState<PageKey>("chat");
+  const [selectedSessionId, setSelectedSessionId] = useState("");
   const [defaultModel, setDefaultModel] = useState("默认模型");
   const page = pageTitles[activePage];
 
@@ -44,20 +45,25 @@ function App() {
       .catch(() => setDefaultModel("默认模型"));
   }, []);
 
+  const openSession = (id: string) => {
+    setSelectedSessionId(id);
+    setActivePage("chat");
+  };
+
   const renderPage = () => {
     switch (activePage) {
       case "chat":
-        return <ChatPage />;
+        return <ChatPage initialSessionId={selectedSessionId} />;
       case "knowledge":
         return <KnowledgePage />;
       case "model":
         return <ModelPage />;
       case "history":
-        return <HistoryPage />;
+        return <HistoryPage onOpenSession={openSession} />;
       case "settings":
         return <SettingsPage />;
       default:
-        return <ChatPage />;
+        return <ChatPage initialSessionId={selectedSessionId} />;
     }
   };
 
