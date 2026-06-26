@@ -1,6 +1,6 @@
 [project]
 name = "ai-backend"
-version = "1.0.2"
+version = "1.0.3"
 description = "AI-Workspace - Python AI 后端引擎"
 requires-python = ">=3.11"
 dependencies = [

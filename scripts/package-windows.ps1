@@ -38,6 +38,9 @@ if (-not $SkipBuild) {
   Push-Location $root
   try {
     pnpm tauri build --config "src-tauri/tauri.bundle.conf.json"
+    if ($LASTEXITCODE -ne 0) {
+      throw "Tauri build failed with exit code $LASTEXITCODE"
+    }
   } finally {
     Pop-Location
   }
@@ -103,5 +106,32 @@ if (Test-Path $nsisDir) {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $distDir $_.Name) -Force
   }
 }
+
+# --- Updater: collect signature and generate update.json ---
+$sigFile = Get-ChildItem -LiteralPath $bundleDir -Recurse -Filter "*.sig" | Select-Object -First 1
+if ($sigFile) {
+  $signature = Get-Content -LiteralPath $sigFile.FullName -Raw
+  Write-Host "Updater signature collected from: $($sigFile.FullName)"
+} else {
+  Write-Warning "No .sig file found — updater will not work (forgot createUpdaterArtifacts?)"
+  $signature = ""
+}
+
+# NSIS installer URL (preferred for Windows updates)
+$installerName = "AI-Workspace_$version`_x64-setup.exe"
+$updateJson = @{
+  version = $version
+  notes = "See RELEASE_NOTES.md for details"
+  pub_date = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK")
+  platforms = @{
+    "windows-x86_64" = @{
+      signature = $signature.Trim()
+      url = "https://github.com/qfmx/ai-desktop-ui/releases/download/v$version/$installerName"
+    }
+  }
+} | ConvertTo-Json -Depth 10
+Set-Content -LiteralPath (Join-Path $distDir "update.json") -Value $updateJson -Encoding UTF8
+Write-Host "update.json generated at: $(Join-Path $distDir 'update.json')"
+# -----------------------------------------------------------
 
 Get-ChildItem -LiteralPath $distDir | Select-Object Name, Length, LastWriteTime

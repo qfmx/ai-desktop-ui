@@ -23,6 +23,9 @@ ai-backend/.env
 ai-backend/.venv
 ai-backend/data/*.db
 
+# Tauri updater signing key
+.tauri/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

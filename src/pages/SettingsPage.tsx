@@ -1,16 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bell,
+  CheckCircle,
   Database,
   Download,
+  Info,
   Keyboard,
   Monitor,
+  RefreshCw,
+  RotateCcw,
   Save,
   Shield,
   Upload,
+  XCircle,
 } from "lucide-react";
 import { api } from "../services/api";
 import { useTheme } from "../contexts/ThemeContext";
+import { isTauri } from "@tauri-apps/api/core";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 
 const sections = [
   { id: "general", title: "通用设置", icon: Monitor, description: "语言、启动和界面偏好" },
@@ -18,6 +26,7 @@ const sections = [
   { id: "security", title: "安全隐私", icon: Shield, description: "审计、脱敏与访问控制" },
   { id: "notify", title: "通知偏好", icon: Bell, description: "任务完成和同步提醒" },
   { id: "data", title: "数据治理", icon: Database, description: "备份、导入、导出和清理" },
+  { id: "about", title: "关于", icon: Info, description: "版本信息与在线更新" },
 ] as const;
 
 type SectionId = (typeof sections)[number]["id"];
@@ -52,6 +61,103 @@ export default function SettingsPage() {
   const [storageItems, setStorageItems] = useState<StorageItem[]>([]);
   const [promptTemplates, setPromptTemplates] = useState<PromptTemplate[]>([]);
   const [saving, setSaving] = useState(false);
+  const [updateState, setUpdateState] = useState<"idle" | "checking" | "up-to-date" | "available" | "error">("idle");
+  const [updateVersion, setUpdateVersion] = useState("");
+  const [updateBody, setUpdateBody] = useState("");
+  const [updateDate, setUpdateDate] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [progressText, setProgressText] = useState("");
+  const [installed, setInstalled] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const pendingUpdateRef = useRef<Update | null>(null);
+  const downloadContentLengthRef = useRef<number | null>(null);
+
+  const handleCheckUpdate = async () => {
+    setUpdateState("checking");
+    setErrorMsg("");
+    setProgress(null);
+    setProgressText("");
+    setInstalled(false);
+    pendingUpdateRef.current = null;
+    if (!isTauri()) {
+      setUpdateState("error");
+      setErrorMsg("更新检查只能在桌面应用中使用，请通过 Tauri 启动或使用已安装版本。");
+      return;
+    }
+    try {
+      const update = await check();
+      if (update) {
+        pendingUpdateRef.current = update;
+        setUpdateVersion(update.version);
+        setUpdateBody(update.body ?? "");
+        setUpdateDate(update.date ?? "");
+        setUpdateState("available");
+      } else {
+        pendingUpdateRef.current = null;
+        setUpdateState("up-to-date");
+      }
+    } catch (err: any) {
+      pendingUpdateRef.current = null;
+      setUpdateState("error");
+      setErrorMsg(err?.message ?? String(err));
+    }
+  };
+
+  const handleDownloadInstall = async () => {
+    const pendingUpdate = pendingUpdateRef.current;
+    if (!pendingUpdate) return;
+    setDownloading(true);
+    setProgress(0);
+    downloadContentLengthRef.current = null;
+    let downloadedBytes = 0;
+    setProgressText("准备下载...");
+    try {
+      await pendingUpdate.downloadAndInstall((event) => {
+        switch (event.event) {
+          case "Started":
+            downloadedBytes = 0;
+            downloadContentLengthRef.current = event.data.contentLength ?? null;
+            setProgress(event.data.contentLength ? 0 : null);
+            setProgressText(`开始下载 (${event.data.contentLength ?? "?"} 字节)`);
+            break;
+          case "Progress":
+            downloadedBytes += event.data.chunkLength;
+            if (downloadContentLengthRef.current) {
+              const pct = Math.min(
+                100,
+                Math.round((downloadedBytes / downloadContentLengthRef.current) * 100)
+              );
+              setProgress(pct);
+              setProgressText(`下载中 ${pct}%`);
+            } else {
+              setProgressText(`已下载 ${downloadedBytes} 字节`);
+            }
+            break;
+          case "Finished":
+            setProgress(100);
+            setProgressText("下载完成，正在安装...");
+            break;
+        }
+      });
+      setInstalled(true);
+      setProgressText("更新已安装");
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? String(err));
+      setUpdateState("error");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleRelaunch = async () => {
+    try {
+      await relaunch();
+    } catch {
+      // fallback: user can manually restart
+    }
+  };
 
   useEffect(() => {
     void Promise.all([
@@ -239,6 +345,110 @@ export default function SettingsPage() {
                 <Upload size={16} />
                 导入备份
               </button>
+            </div>
+          </>
+        )}
+
+        {section === "about" && (
+          <>
+            <header className="section-title">
+              <div>
+                <span className="eyebrow">About</span>
+                <h2>关于 AI-Workspace</h2>
+              </div>
+            </header>
+
+            <div className="about-info">
+              <div className="about-row">
+                <span>应用名称</span>
+                <strong>AI-Workspace</strong>
+              </div>
+              <div className="about-row">
+                <span>当前版本</span>
+                <strong>1.0.3</strong>
+              </div>
+              <div className="about-row">
+                <span>项目主页</span>
+                <a href="https://github.com/qfmx/ai-desktop-ui" target="_blank" rel="noreferrer">
+                  github.com/qfmx/ai-desktop-ui
+                </a>
+              </div>
+            </div>
+
+            <div className="about-update">
+              {updateState === "idle" && (
+                <button className="primary-action" onClick={handleCheckUpdate} type="button">
+                  <RefreshCw size={16} />
+                  检查更新
+                </button>
+              )}
+
+              {updateState === "checking" && (
+                <div className="update-status">
+                  <span className="update-spinner" />
+                  正在检查更新...
+                </div>
+              )}
+
+              {updateState === "up-to-date" && (
+                <div className="update-status update-ok">
+                  <CheckCircle size={16} />
+                  已是最新版本
+                </div>
+              )}
+
+              {updateState === "available" && (
+                <div className="update-card">
+                  <div className="update-header">
+                    <Download size={18} />
+                    <div>
+                      <strong>发现新版本 v{updateVersion}</strong>
+                      <small>{updateDate}</small>
+                    </div>
+                  </div>
+                  {updateBody && (
+                    <div className="update-notes">
+                      <p>{updateBody}</p>
+                    </div>
+                  )}
+                  <div className="update-progress">
+                    {progress !== null && (
+                      <div className="progress-bar">
+                        <i style={{ width: `${progress}%` }} />
+                      </div>
+                    )}
+                    {progressText && <small>{progressText}</small>}
+                  </div>
+                  <div className="update-actions">
+                    {!installed ? (
+                      <button
+                        className="primary-action"
+                        disabled={downloading}
+                        onClick={handleDownloadInstall}
+                        type="button"
+                      >
+                        <Download size={16} />
+                        {downloading ? "下载中..." : "下载并安装"}
+                      </button>
+                    ) : (
+                      <button className="primary-action" onClick={handleRelaunch} type="button">
+                        <RotateCcw size={16} />
+                        立即重启
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {updateState === "error" && (
+                <div className="update-status update-error">
+                  <XCircle size={16} />
+                  检查更新失败：{errorMsg}
+                  <button className="secondary-action" onClick={handleCheckUpdate} type="button">
+                    重试
+                  </button>
+                </div>
+              )}
             </div>
           </>
         )}

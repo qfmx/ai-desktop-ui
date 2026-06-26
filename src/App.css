@@ -2447,6 +2447,160 @@ textarea::placeholder {
   border-top: 1px solid var(--line-soft);
 }
 
+/* ---- About / Update section ---- */
+.about-info {
+  display: grid;
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.about-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  background: rgba(var(--surface-rgb), 0.9);
+}
+
+.about-row span {
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+.about-row strong {
+  font-size: 14px;
+}
+
+.about-row a {
+  color: var(--cyan);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.about-row a:hover {
+  text-decoration: underline;
+}
+
+.about-update {
+  display: grid;
+  gap: 12px;
+  padding: 14px 0 0;
+}
+
+.update-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  color: var(--subtle);
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.update-ok {
+  color: var(--green);
+  background: rgba(var(--green-rgb), 0.08);
+}
+
+.update-error {
+  color: var(--rose);
+  background: rgba(var(--rose-rgb), 0.08);
+  flex-wrap: wrap;
+}
+
+.update-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--line);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: update-spin 0.7s linear infinite;
+}
+
+@keyframes update-spin {
+  to { transform: rotate(360deg); }
+}
+
+.update-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(var(--surface-rgb), 0.9);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+}
+
+.update-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--cyan);
+}
+
+.update-header strong {
+  display: block;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.update-header small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.update-notes {
+  max-height: 120px;
+  overflow: auto;
+  padding: 10px;
+  color: var(--subtle);
+  background: rgba(var(--bg-rgb), 0.4);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: pre-wrap;
+}
+
+.update-notes p {
+  margin: 0;
+}
+
+.update-progress {
+  display: grid;
+  gap: 6px;
+}
+
+.progress-bar {
+  height: 6px;
+  overflow: hidden;
+  background: var(--line-soft);
+  border-radius: 999px;
+}
+
+.progress-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  border-radius: inherit;
+  transition: width 200ms ease;
+}
+
+.update-progress small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.update-actions {
+  display: flex;
+  gap: 10px;
+}
+
 @keyframes pulse {
   0%,
   100% {

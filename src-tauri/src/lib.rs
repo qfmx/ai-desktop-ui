@@ -90,6 +90,10 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(Mutex::new(BackendState { child: None }))
         .setup(|app| {
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
+
             let app_handle = app.handle().clone();
             std::thread::spawn(move || {
                 if let Some((work_dir, program, args)) = find_python_backend(&app_handle) {

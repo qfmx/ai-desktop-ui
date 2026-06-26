@@ -1,3 +1,33 @@
+# Release 1.0.3
+
+## Summary
+
+This release fixes the desktop update-check flow and rebuilds the Windows
+release artifacts for the updated app version.
+
+## Changes
+
+- Guarded updater checks so they only call the Tauri updater API inside the
+  desktop runtime.
+- Preserved pending updater metadata across React renders before download and
+  install.
+- Fixed updater download progress calculation from chunked progress events.
+- Bumped app, Tauri, Rust, and Python package versions to `1.0.3`.
+
+## Outputs
+
+- `AI-Workspace_1.0.3_x64-setup.exe`
+- `AI-Workspace_1.0.3_x64_zh-CN.msi`
+- `AI-Workspace_1.0.3_x64_single.exe`
+- `AI-Workspace_1.0.3_x64_portable.zip`
+- `AI-Workspace-portable/`
+- `ai-backend.exe`
+
+## Verification
+
+- `pnpm build`
+- `pnpm package:windows`
+
 # Release 1.0.2
 
 ## Summary
